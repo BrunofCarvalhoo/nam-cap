@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <curl/curl.h>
 #include <string.h>
 
 #define LARGURA 800
@@ -14,16 +13,28 @@
 // Estrutura para o nó da lista duplamente encadeada
 typedef struct Node {
     int x, y;
-    int tipo; // 0: caminho vazio, 1: parede, 2: comida
+    int tipo; // 0: caminho vazio, 1: parede, 2: comida, 3: portal
+    int mapa_id; // 1 ou 2 para identificar qual mapa
     struct Node* prox;
     struct Node* ant;
 } Node;
+
+// Estrutura para o portal
+typedef struct {
+    int mapa_origem;
+    int mapa_destino;
+    int x_origem;
+    int y_origem;
+    int x_destino;
+    int y_destino;
+} Portal;
 
 // Estrutura para a lista duplamente encadeada
 typedef struct {
     Node* primeiro;
     Node* ultimo;
     int tamanho;
+    Portal portal; // Informações do portal entre os mapas
 } ListaDupla;
 
 // Cores disponíveis para o fantasma
@@ -67,12 +78,6 @@ ListaDupla mapa;
 int pontuacao = 0;
 int comidas_restantes = 0;
 
-// Buffer para resposta da API
-struct MemoryStruct {
-    char* memory;
-    size_t size;
-};
-
 // Funções da lista duplamente encadeada
 void inicializarLista(ListaDupla* lista) {
     lista->primeiro = NULL;
@@ -86,26 +91,32 @@ Node* criarNo(int x, int y, int tipo) {
         novo->x = x;
         novo->y = y;
         novo->tipo = tipo;
+        novo->mapa_id = 0; // Será definido na inserção
         novo->prox = NULL;
         novo->ant = NULL;
     }
     return novo;
 }
 
-void inserirFim(ListaDupla* lista, int x, int y, int tipo) {
+void inserirFim(ListaDupla* lista, int x, int y, int tipo, int mapa_id) {
     Node* novo = criarNo(x, y, tipo);
     if (novo) {
+        novo->mapa_id = mapa_id;
         if (lista->primeiro == NULL) {
             lista->primeiro = novo;
             lista->ultimo = novo;
+            // Torna a lista circular
+            novo->prox = novo;
+            novo->ant = novo;
         } else {
             novo->ant = lista->ultimo;
+            novo->prox = lista->primeiro;
             lista->ultimo->prox = novo;
+            lista->primeiro->ant = novo;
             lista->ultimo = novo;
         }
         lista->tamanho++;
         
-        // Se for uma célula do tipo comida, incrementa o contador
         if (tipo == 2) {
             comidas_restantes++;
         }
@@ -122,119 +133,12 @@ Node* buscarNo(ListaDupla* lista, int x, int y) {
     return NULL;
 }
 
-// Callback para a resposta da API
-static size_t WriteMemoryCallback(void* contents, size_t size, size_t nmemb, void* userp) {
-    size_t realsize = size * nmemb;
-    struct MemoryStruct* mem = (struct MemoryStruct*)userp;
-
-    char* ptr = realloc(mem->memory, mem->size + realsize + 1);
-    if (!ptr) {
-        printf("Sem memória suficiente!\n");
-        return 0;
-    }
-
-    mem->memory = ptr;
-    memcpy(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->memory[mem->size] = 0;
-
-    return realsize;
-}
-
-// Função para consultar a API do Gemini
-int consultarGeminiAPI(int px, int py, int fx, int fy, ListaDupla* mapa) {
-    CURL* curl;
-    CURLcode res;
-    struct MemoryStruct chunk;
-    int direcao = 0; // Direção padrão (direita)
-
-    chunk.memory = malloc(1);
-    chunk.size = 0;
-
-    curl_global_init(CURL_GLOBAL_ALL);
-    curl = curl_easy_init();
-
-    if (curl) {
-        char url[512];
-        // Usando a chave da API do Gemini fornecida
-        sprintf(url, 
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyAgI1cbnClUVnY8ofajlXjV7ZWqkenTuMI");
-
-        // Prepara os dados do mapa para enviar na consulta
-        char mapaStr[4096] = "";
-        Node* atual = mapa->primeiro;
-        
-        while (atual) {
-            char nodeInfo[64];
-            sprintf(nodeInfo, "%d,%d,%d;", atual->x, atual->y, atual->tipo);
-            strcat(mapaStr, nodeInfo);
-            atual = atual->prox;
-        }
-
-        // Cria o corpo da requisição JSON
-        char postFields[8192];
-        sprintf(postFields, 
-            "{\"contents\":[{\"parts\":[{\"text\":\"Você é o Pac-Man em um jogo. "
-            "Sua posição atual é (%d,%d). O fantasma está em (%d,%d). "
-            "O mapa é representado como 'x,y,tipo' onde tipo 0 é caminho vazio, "
-            "tipo 1 é parede e tipo 2 é comida. Mapa: %s. "
-            "Escolha uma direção para se mover. Responda APENAS com um número: "
-            "0 para direita, 1 para cima, 2 para esquerda, 3 para baixo.\"}]}]}", 
-            px, py, fx, fy, mapaStr);
-
-        curl_easy_setopt(curl, CURLOPT_URL, url);
-        curl_easy_setopt(curl, CURLOPT_POST, 1L);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postFields);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&chunk);
-
-        struct curl_slist* headers = NULL;
-        headers = curl_slist_append(headers, "Content-Type: application/json");
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-        res = curl_easy_perform(curl);
-
-        if (res != CURLE_OK) {
-            fprintf(stderr, "curl_easy_perform() falhou: %s\n", curl_easy_strerror(res));
-        } else {
-            // Extrai a direção da resposta Gemini
-            char* responseText = chunk.memory;
-            
-            if (strstr(responseText, "\"0\"") || strstr(responseText, "\"direita\""))
-                direcao = 0;
-            else if (strstr(responseText, "\"1\"") || strstr(responseText, "\"cima\""))
-                direcao = 1;
-            else if (strstr(responseText, "\"2\"") || strstr(responseText, "\"esquerda\""))
-                direcao = 2;
-            else if (strstr(responseText, "\"3\"") || strstr(responseText, "\"baixo\""))
-                direcao = 3;
-            
-            // Busca números na resposta como backup
-            if (strstr(responseText, "0")) direcao = 0;
-            else if (strstr(responseText, "1")) direcao = 1;
-            else if (strstr(responseText, "2")) direcao = 2;
-            else if (strstr(responseText, "3")) direcao = 3;
-        }
-
-        curl_slist_free_all(headers);
-        curl_easy_cleanup(curl);
-    }
-
-    curl_global_cleanup();
-    free(chunk.memory);
-
-    return direcao;
-}
-
-// Função para mover o Pac-Man (agora com implementação real do Gemini)
+// Função para mover o Pac-Man
 void moverPacman() {
     int nova_x = pacman_x;
     int nova_y = pacman_y;
-
-    // Obter direção do Gemini API
-    direcao_pacman = consultarGeminiAPI(pacman_x, pacman_y, fantasma_x, fantasma_y, &mapa);
-
-    // Aplica a direção escolhida
+    
+    // Movimento simples: tenta mover na direção atual
     switch (direcao_pacman) {
     case 0: nova_x += 1; break; // Direita
     case 1: nova_y -= 1; break; // Cima
@@ -242,49 +146,97 @@ void moverPacman() {
     case 3: nova_y += 1; break; // Baixo
     }
 
-    // Verifica colisão com paredes
+    // Verifica colisão com paredes e portal
     Node* destino = buscarNo(&mapa, nova_x, nova_y);
     if (destino && destino->tipo != 1) {
-        pacman_x = nova_x;
-        pacman_y = nova_y;
+        // Se encontrar um portal
+        if (destino->tipo == 3) {
+            if (destino->mapa_id == 1) {
+                // Teleporta do mapa 1 para o mapa 2
+                pacman_x = mapa.portal.x_destino;
+                pacman_y = mapa.portal.y_destino;
+            } else {
+                // Teleporta do mapa 2 para o mapa 1
+                pacman_x = mapa.portal.x_origem;
+                pacman_y = mapa.portal.y_origem;
+            }
+        } else {
+            pacman_x = nova_x;
+            pacman_y = nova_y;
 
-        // Se houver comida, come
-        if (destino->tipo == 2) {
-            destino->tipo = 0;  // Remove a comida
-            pontuacao += 10;
-            comidas_restantes--;
+            // Se houver comida, come
+            if (destino->tipo == 2) {
+                destino->tipo = 0;  // Remove a comida
+                pontuacao += 10;
+                comidas_restantes--;
+            }
         }
+    } else {
+        // Se colidiu com parede, muda de direção
+        direcao_pacman = (direcao_pacman + 1) % 4;
     }
 }
 
 // Função para criar o mapa
 void criarMapa() {
     inicializarLista(&mapa);
+    
+    // Configuração do portal
+    mapa.portal.mapa_origem = 1;
+    mapa.portal.mapa_destino = 2;
+    mapa.portal.x_origem = COLUNAS - 2;
+    mapa.portal.y_origem = LINHAS - 2;
+    mapa.portal.x_destino = 1;
+    mapa.portal.y_destino = 1;
 
-    // Cria as bordas
+    // Array para marcar posições ocupadas
+    int posicoes_ocupadas[COLUNAS][LINHAS][2] = {0}; // [x][y][mapa_id]
+
+    // Primeiro marca todas as paredes
+    // Mapa 1
     for (int x = 0; x < COLUNAS; x++) {
         for (int y = 0; y < LINHAS; y++) {
-            // Se for borda, cria parede
-            if (x == 0 || y == 0 || x == COLUNAS - 1 || y == LINHAS - 1) {
-                inserirFim(&mapa, x, y, 1); // Parede
+            if (x == 0 || y == 0 || x == COLUNAS - 1 || y == LINHAS - 1 ||
+                (x == 3 && y >= 3 && y <= 7) || 
+                (x == 7 && y >= 5 && y <= 10) ||
+                (x >= 10 && x <= 15 && y == 3) ||
+                (x >= 5 && x <= 10 && y == 8)) {
+                inserirFim(&mapa, x, y, 1, 1); // Parede
+                posicoes_ocupadas[x][y][0] = 1;
             }
-            // Senão, cria comida ou caminho vazio
-            else {
-                // Alguns obstáculos internos
-                if ((x == 3 && y >= 3 && y <= 7) || 
-                    (x == 7 && y >= 5 && y <= 10) ||
-                    (x >= 10 && x <= 15 && y == 3) ||
-                    (x >= 5 && x <= 10 && y == 8)) {
-                    inserirFim(&mapa, x, y, 1); // Parede
-                }
-                // Posição inicial do Pac-Man e fantasma fica vazia
-                else if ((x == pacman_x && y == pacman_y) || 
-                         (x == fantasma_x && y == fantasma_y)) {
-                    inserirFim(&mapa, x, y, 0); // Caminho vazio
-                }
-                // Resto é comida
-                else {
-                    inserirFim(&mapa, x, y, 2); // Comida
+        }
+    }
+
+    // Mapa 2
+    for (int x = 0; x < COLUNAS; x++) {
+        for (int y = 0; y < LINHAS; y++) {
+            if (x == 0 || y == 0 || x == COLUNAS - 1 || y == LINHAS - 1 ||
+                (x == 5 && y >= 2 && y <= 8) || 
+                (x == 12 && y >= 4 && y <= 12) ||
+                (x >= 8 && x <= 14 && y == 6) ||
+                (x >= 3 && x <= 9 && y == 10)) {
+                inserirFim(&mapa, x, y, 1, 2); // Parede
+                posicoes_ocupadas[x][y][1] = 1;
+            }
+        }
+    }
+
+    // Adiciona os portais
+    inserirFim(&mapa, mapa.portal.x_origem, mapa.portal.y_origem, 3, 1);
+    inserirFim(&mapa, mapa.portal.x_destino, mapa.portal.y_destino, 3, 2);
+    posicoes_ocupadas[mapa.portal.x_origem][mapa.portal.y_origem][0] = 1;
+    posicoes_ocupadas[mapa.portal.x_destino][mapa.portal.y_destino][1] = 1;
+
+    // Marca posições iniciais do Pac-Man e fantasma
+    posicoes_ocupadas[pacman_x][pacman_y][0] = 1;
+    posicoes_ocupadas[fantasma_x][fantasma_y][0] = 1;
+
+    // Agora adiciona comidas apenas em posições vazias
+    for (int mapa_id = 1; mapa_id <= 2; mapa_id++) {
+        for (int x = 1; x < COLUNAS - 1; x++) {
+            for (int y = 1; y < LINHAS - 1; y++) {
+                if (!posicoes_ocupadas[x][y][mapa_id - 1]) {
+                    inserirFim(&mapa, x, y, 2, mapa_id); // Comida
                 }
             }
         }
@@ -344,11 +296,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case 'C':      mudarCorFantasma(hwnd); break; // Pressione 'C' para mudar a cor
         }
         
-        // Verifica colisão com paredes
+        // Verifica colisão com paredes e portal
         Node* destino = buscarNo(&mapa, nova_x, nova_y);
         if (destino && destino->tipo != 1) {
-            fantasma_x = nova_x;
-            fantasma_y = nova_y;
+            // Se encontrar um portal
+            if (destino->tipo == 3) {
+                if (destino->mapa_id == 1) {
+                    // Teleporta do mapa 1 para o mapa 2
+                    fantasma_x = mapa.portal.x_destino;
+                    fantasma_y = mapa.portal.y_destino;
+                } else {
+                    // Teleporta do mapa 2 para o mapa 1
+                    fantasma_x = mapa.portal.x_origem;
+                    fantasma_y = mapa.portal.y_origem;
+                }
+            } else {
+                fantasma_x = nova_x;
+                fantasma_y = nova_y;
+            }
             
             // Verifica colisão entre Pac-Man e fantasma
             if (fantasma_x == pacman_x && fantasma_y == pacman_y) {
@@ -372,7 +337,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         
         // Desenha o mapa
         Node* atual = mapa.primeiro;
-        while (atual) {
+        do {
             RECT celula = { 
                 atual->x * TAMANHO_CELULA, 
                 atual->y * TAMANHO_CELULA, 
@@ -392,7 +357,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 break;
             }
             case 2: { // Comida
-                // Desenha um pequeno círculo
                 HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
                 RECT comida = {
                     atual->x * TAMANHO_CELULA + TAMANHO_CELULA/3,
@@ -404,10 +368,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DeleteObject(whiteBrush);
                 break;
             }
+            case 3: { // Portal
+                HBRUSH portalBrush = CreateSolidBrush(RGB(255, 0, 255));
+                FillRect(hdc, &celula, portalBrush);
+                DeleteObject(portalBrush);
+                break;
+            }
             }
             
             atual = atual->prox;
-        }
+        } while (atual != mapa.primeiro);
         
         // Desenha o Pac-Man (amarelo)
         HBRUSH yellowBrush = CreateSolidBrush(RGB(255, 255, 0));
@@ -431,10 +401,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         FillRect(hdc, &fantasmaRect, fantBrush);
         DeleteObject(fantBrush);
         
-        // Desenha a pontuação e cor atual
+        // Desenha a pontuação, cor atual e mapa atual
         char scoreText[100];
-        sprintf(scoreText, "Pontuação: %d | Cor do Fantasma: %s (Pressione 'C' para mudar)", 
-                pontuacao, NOMES_CORES[cor_fantasma]);
+        Node* mapa_atual = buscarNo(&mapa, pacman_x, pacman_y);
+        sprintf(scoreText, "Pontuação: %d | Cor do Fantasma: %s (Pressione 'C' para mudar) | Mapa: %d", 
+                pontuacao, NOMES_CORES[cor_fantasma], mapa_atual ? mapa_atual->mapa_id : 1);
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(255, 255, 255));
         TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
@@ -446,11 +417,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_DESTROY:
         // Libera a memória da lista
         Node* atual = mapa.primeiro;
-        while (atual) {
+        do {
             Node* temp = atual;
             atual = atual->prox;
             free(temp);
-        }
+        } while (atual != mapa.primeiro);
         
         PostQuitMessage(0);
         break;
@@ -471,7 +442,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = CLASS_NAME;
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
 
-    RegisterClass(&wc);
+    if (!RegisterClass(&wc)) {
+        MessageBox(NULL, "Erro ao registrar a classe da janela!", "Erro", MB_OK | MB_ICONERROR);
+        return 1;
+    }
 
     HWND hwnd = CreateWindowEx(
         0,
@@ -482,9 +456,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL, NULL, hInstance, NULL
     );
 
-    if (hwnd == NULL) return 0;
+    if (hwnd == NULL) {
+        MessageBox(NULL, "Erro ao criar a janela!", "Erro", MB_OK | MB_ICONERROR);
+        return 1;
+    }
 
     ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
 
     MSG msg = { };
     while (GetMessage(&msg, NULL, 0, 0)) {
