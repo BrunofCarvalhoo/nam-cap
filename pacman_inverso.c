@@ -4,9 +4,9 @@
 #include <time.h>
 #include <string.h>
 
-#define LARGURA 800
-#define ALTURA 600
-#define TAMANHO_CELULA 40
+#define LARGURA 1000
+#define ALTURA 800
+#define TAMANHO_CELULA 35  // Células maiores para labirinto mais espaçado
 #define LINHAS (ALTURA / TAMANHO_CELULA)
 #define COLUNAS (LARGURA / TAMANHO_CELULA)
 
@@ -14,15 +14,12 @@
 typedef struct Node {
     int x, y;
     int tipo; // 0: caminho vazio, 1: parede, 2: comida, 3: portal
-    int mapa_id; // 1 ou 2 para identificar qual mapa
     struct Node* prox;
     struct Node* ant;
 } Node;
 
 // Estrutura para o portal
 typedef struct {
-    int mapa_origem;
-    int mapa_destino;
     int x_origem;
     int y_origem;
     int x_destino;
@@ -34,7 +31,7 @@ typedef struct {
     Node* primeiro;
     Node* ultimo;
     int tamanho;
-    Portal portal; // Informações do portal entre os mapas
+    Portal portal; // Informações do portal
 } ListaDupla;
 
 // Cores disponíveis para o fantasma
@@ -69,10 +66,11 @@ const COLORREF VALORES_CORES[] = {
 };
 
 // Variáveis globais
-int fantasma_x = 1, fantasma_y = 1;
-int pacman_x = 10, pacman_y = 10;
+int fantasma_x = 2, fantasma_y = 2;  // Posição inicial do fantasma ajustada
+int pacman_x = 15, pacman_y = 15;    // Posição inicial do Pac-Man ajustada
 int direcao_pacman = 0; // 0: direita, 1: cima, 2: esquerda, 3: baixo
 CorFantasma cor_fantasma = VERMELHO; // Cor inicial do fantasma
+int movimento_fantasma = 0; // Contador para retardar o movimento do fantasma
 
 ListaDupla mapa;
 int pontuacao = 0;
@@ -91,17 +89,15 @@ Node* criarNo(int x, int y, int tipo) {
         novo->x = x;
         novo->y = y;
         novo->tipo = tipo;
-        novo->mapa_id = 0; // Será definido na inserção
         novo->prox = NULL;
         novo->ant = NULL;
     }
     return novo;
 }
 
-void inserirFim(ListaDupla* lista, int x, int y, int tipo, int mapa_id) {
+void inserirFim(ListaDupla* lista, int x, int y, int tipo) {
     Node* novo = criarNo(x, y, tipo);
     if (novo) {
-        novo->mapa_id = mapa_id;
         if (lista->primeiro == NULL) {
             lista->primeiro = novo;
             lista->ultimo = novo;
@@ -124,17 +120,45 @@ void inserirFim(ListaDupla* lista, int x, int y, int tipo, int mapa_id) {
 }
 
 Node* buscarNo(ListaDupla* lista, int x, int y) {
+    if (lista->primeiro == NULL) {
+        return NULL;
+    }
+    
     Node* atual = lista->primeiro;
-    while (atual) {
+    do {
         if (atual->x == x && atual->y == y)
             return atual;
         atual = atual->prox;
-    }
+    } while (atual != lista->primeiro);
+    
     return NULL;
+}
+
+// Função auxiliar para verificar se é parede
+int ehParede(int x, int y) {
+    // Bordas do mapa
+    if (x <= 0 || y <= 0 || x >= COLUNAS - 1 || y >= LINHAS - 1) {
+        return 1;
+    }
+    
+    // Paredes internas do labirinto - mais espaçadas
+    return ((x == 5 && y >= 4 && y <= 12) || 
+            (x == 10 && y >= 6 && y <= 16) ||
+            (x >= 8 && x <= 15 && y == 4) ||
+            (x >= 6 && x <= 13 && y == 10) ||
+            (x >= 18 && x <= 24 && y == 8) ||
+            (x == 18 && y >= 10 && y <= 18) ||
+            (x >= 10 && x <= 20 && y == 15) ||
+            (x == 15 && y >= 18 && y <= 22));
 }
 
 // Função para mover o Pac-Man
 void moverPacman() {
+    // Aumenta a frequência de mudanças aleatórias de direção para evitar ficar preso
+    if (rand() % 5 == 0) {
+        direcao_pacman = rand() % 4;
+    }
+    
     int nova_x = pacman_x;
     int nova_y = pacman_y;
     
@@ -146,17 +170,29 @@ void moverPacman() {
     case 3: nova_y += 1; break; // Baixo
     }
 
+    // Verifica se a posição nova é uma parede
+    if (ehParede(nova_x, nova_y)) {
+        // Se for parede, muda de direção
+        direcao_pacman = (direcao_pacman + 1) % 4;
+        return;
+    }
+
     // Verifica colisão com paredes e portal
     Node* destino = buscarNo(&mapa, nova_x, nova_y);
-    if (destino && destino->tipo != 1) {
+    if (destino) {
+        if (destino->tipo == 1) { // É parede
+            direcao_pacman = (direcao_pacman + 1) % 4;
+            return;
+        }
+        
         // Se encontrar um portal
         if (destino->tipo == 3) {
-            if (destino->mapa_id == 1) {
-                // Teleporta do mapa 1 para o mapa 2
+            if (nova_x == mapa.portal.x_origem && nova_y == mapa.portal.y_origem) {
+                // Teleporta da origem para o destino
                 pacman_x = mapa.portal.x_destino;
                 pacman_y = mapa.portal.y_destino;
             } else {
-                // Teleporta do mapa 2 para o mapa 1
+                // Teleporta do destino para a origem
                 pacman_x = mapa.portal.x_origem;
                 pacman_y = mapa.portal.y_origem;
             }
@@ -171,6 +207,10 @@ void moverPacman() {
                 comidas_restantes--;
             }
         }
+    } else if (!ehParede(nova_x, nova_y)) {
+        // Se não encontrou nenhum nó mas não é parede, pode mover-se
+        pacman_x = nova_x;
+        pacman_y = nova_y;
     } else {
         // Se colidiu com parede, muda de direção
         direcao_pacman = (direcao_pacman + 1) % 4;
@@ -181,63 +221,40 @@ void moverPacman() {
 void criarMapa() {
     inicializarLista(&mapa);
     
-    // Configuração do portal
-    mapa.portal.mapa_origem = 1;
-    mapa.portal.mapa_destino = 2;
-    mapa.portal.x_origem = COLUNAS - 2;
-    mapa.portal.y_origem = LINHAS - 2;
-    mapa.portal.x_destino = 1;
-    mapa.portal.y_destino = 1;
+    // Configuração do portal - posições mais estratégicas
+    mapa.portal.x_origem = 3;
+    mapa.portal.y_origem = 3;
+    mapa.portal.x_destino = COLUNAS - 4;
+    mapa.portal.y_destino = LINHAS - 4;
 
     // Array para marcar posições ocupadas
-    int posicoes_ocupadas[COLUNAS][LINHAS][2] = {0}; // [x][y][mapa_id]
+    int posicoes_ocupadas[COLUNAS][LINHAS] = {0};
 
-    // Primeiro marca todas as paredes
-    // Mapa 1
+    // Marca todas as paredes
     for (int x = 0; x < COLUNAS; x++) {
         for (int y = 0; y < LINHAS; y++) {
-            if (x == 0 || y == 0 || x == COLUNAS - 1 || y == LINHAS - 1 ||
-                (x == 3 && y >= 3 && y <= 7) || 
-                (x == 7 && y >= 5 && y <= 10) ||
-                (x >= 10 && x <= 15 && y == 3) ||
-                (x >= 5 && x <= 10 && y == 8)) {
-                inserirFim(&mapa, x, y, 1, 1); // Parede
-                posicoes_ocupadas[x][y][0] = 1;
-            }
-        }
-    }
-
-    // Mapa 2
-    for (int x = 0; x < COLUNAS; x++) {
-        for (int y = 0; y < LINHAS; y++) {
-            if (x == 0 || y == 0 || x == COLUNAS - 1 || y == LINHAS - 1 ||
-                (x == 5 && y >= 2 && y <= 8) || 
-                (x == 12 && y >= 4 && y <= 12) ||
-                (x >= 8 && x <= 14 && y == 6) ||
-                (x >= 3 && x <= 9 && y == 10)) {
-                inserirFim(&mapa, x, y, 1, 2); // Parede
-                posicoes_ocupadas[x][y][1] = 1;
+            if (ehParede(x, y)) {
+                inserirFim(&mapa, x, y, 1); // Parede
+                posicoes_ocupadas[x][y] = 1;
             }
         }
     }
 
     // Adiciona os portais
-    inserirFim(&mapa, mapa.portal.x_origem, mapa.portal.y_origem, 3, 1);
-    inserirFim(&mapa, mapa.portal.x_destino, mapa.portal.y_destino, 3, 2);
-    posicoes_ocupadas[mapa.portal.x_origem][mapa.portal.y_origem][0] = 1;
-    posicoes_ocupadas[mapa.portal.x_destino][mapa.portal.y_destino][1] = 1;
+    inserirFim(&mapa, mapa.portal.x_origem, mapa.portal.y_origem, 3);
+    inserirFim(&mapa, mapa.portal.x_destino, mapa.portal.y_destino, 3);
+    posicoes_ocupadas[mapa.portal.x_origem][mapa.portal.y_origem] = 1;
+    posicoes_ocupadas[mapa.portal.x_destino][mapa.portal.y_destino] = 1;
 
     // Marca posições iniciais do Pac-Man e fantasma
-    posicoes_ocupadas[pacman_x][pacman_y][0] = 1;
-    posicoes_ocupadas[fantasma_x][fantasma_y][0] = 1;
+    posicoes_ocupadas[pacman_x][pacman_y] = 1;
+    posicoes_ocupadas[fantasma_x][fantasma_y] = 1;
 
-    // Agora adiciona comidas apenas em posições vazias
-    for (int mapa_id = 1; mapa_id <= 2; mapa_id++) {
-        for (int x = 1; x < COLUNAS - 1; x++) {
-            for (int y = 1; y < LINHAS - 1; y++) {
-                if (!posicoes_ocupadas[x][y][mapa_id - 1]) {
-                    inserirFim(&mapa, x, y, 2, mapa_id); // Comida
-                }
+    // Agora adiciona comidas apenas em posições vazias e que NÃO são paredes
+    for (int x = 1; x < COLUNAS - 1; x++) {
+        for (int y = 1; y < LINHAS - 1; y++) {
+            if (!posicoes_ocupadas[x][y] && !ehParede(x, y)) {
+                inserirFim(&mapa, x, y, 2); // Comida
             }
         }
     }
@@ -258,8 +275,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_CREATE:
         // Inicializa o mapa
         criarMapa();
-        // Configura um timer para mover o Pac-Man
-        SetTimer(hwnd, 1, 300, NULL); // A cada 300ms
+        // Configura um timer para mover o Pac-Man (mais rápido)
+        SetTimer(hwnd, 1, 200, NULL); // A cada 200ms (em vez de 300ms)
         break;
 
     case WM_TIMER:
@@ -284,6 +301,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
 
     case WM_KEYDOWN:
+        // Controla o movimento do fantasma (mais lento)
+        movimento_fantasma++;
+        if (movimento_fantasma < 2) { // Movimento a cada 2 pressionamentos
+            break;
+        }
+        movimento_fantasma = 0;
+
         // Movimenta o fantasma
         int nova_x = fantasma_x;
         int nova_y = fantasma_y;
@@ -296,17 +320,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case 'C':      mudarCorFantasma(hwnd); break; // Pressione 'C' para mudar a cor
         }
         
+        // Verifica colisão com paredes
+        if (ehParede(nova_x, nova_y)) {
+            break; // Se for parede, não move
+        }
+        
         // Verifica colisão com paredes e portal
         Node* destino = buscarNo(&mapa, nova_x, nova_y);
-        if (destino && destino->tipo != 1) {
+        if (destino) {
+            if (destino->tipo == 1) { // É parede
+                break; // Não permite atravessar parede
+            }
+            
             // Se encontrar um portal
             if (destino->tipo == 3) {
-                if (destino->mapa_id == 1) {
-                    // Teleporta do mapa 1 para o mapa 2
+                if (nova_x == mapa.portal.x_origem && nova_y == mapa.portal.y_origem) {
+                    // Teleporta da origem para o destino
                     fantasma_x = mapa.portal.x_destino;
                     fantasma_y = mapa.portal.y_destino;
                 } else {
-                    // Teleporta do mapa 2 para o mapa 1
+                    // Teleporta do destino para a origem
                     fantasma_x = mapa.portal.x_origem;
                     fantasma_y = mapa.portal.y_origem;
                 }
@@ -314,6 +347,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 fantasma_x = nova_x;
                 fantasma_y = nova_y;
             }
+            
+            // Verifica colisão entre Pac-Man e fantasma
+            if (fantasma_x == pacman_x && fantasma_y == pacman_y) {
+                KillTimer(hwnd, 1);
+                MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
+                PostQuitMessage(0);
+            }
+        } else if (!ehParede(nova_x, nova_y)) {
+            // Se não há nó no destino mas não é parede, pode mover
+            fantasma_x = nova_x;
+            fantasma_y = nova_y;
             
             // Verifica colisão entre Pac-Man e fantasma
             if (fantasma_x == pacman_x && fantasma_y == pacman_y) {
@@ -401,11 +445,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         FillRect(hdc, &fantasmaRect, fantBrush);
         DeleteObject(fantBrush);
         
-        // Desenha a pontuação, cor atual e mapa atual
+        // Desenha a pontuação e cor atual
         char scoreText[100];
-        Node* mapa_atual = buscarNo(&mapa, pacman_x, pacman_y);
-        sprintf(scoreText, "Pontuação: %d | Cor do Fantasma: %s (Pressione 'C' para mudar) | Mapa: %d", 
-                pontuacao, NOMES_CORES[cor_fantasma], mapa_atual ? mapa_atual->mapa_id : 1);
+        sprintf(scoreText, "Pontuação: %d | Cor do Fantasma: %s (Pressione 'C' para mudar)", 
+                pontuacao, NOMES_CORES[cor_fantasma]);
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(255, 255, 255));
         TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
@@ -416,12 +459,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_DESTROY:
         // Libera a memória da lista
-        Node* atual = mapa.primeiro;
-        do {
-            Node* temp = atual;
-            atual = atual->prox;
-            free(temp);
-        } while (atual != mapa.primeiro);
+        if (mapa.primeiro) {
+            Node* atual = mapa.primeiro;
+            do {
+                Node* temp = atual;
+                atual = atual->prox;
+                free(temp);
+                if (atual == mapa.primeiro) break;
+            } while (1);
+        }
         
         PostQuitMessage(0);
         break;
