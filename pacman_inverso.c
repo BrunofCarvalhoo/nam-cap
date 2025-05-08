@@ -71,10 +71,24 @@ int pacman_x = 15, pacman_y = 15;    // Posição inicial do Pac-Man ajustada
 int direcao_pacman = 0; // 0: direita, 1: cima, 2: esquerda, 3: baixo
 CorFantasma cor_fantasma = VERMELHO; // Cor inicial do fantasma
 int movimento_fantasma = 0; // Contador para retardar o movimento do fantasma
+BOOL jogoIniciado = FALSE; // Flag para controlar o início do jogo
 
 ListaDupla mapa;
 int pontuacao = 0;
 int comidas_restantes = 0;
+
+// Definição de IDs para os botões do menu
+#define ID_BOTAO_VERMELHO 101
+#define ID_BOTAO_LARANJA  102
+#define ID_BOTAO_AZUL     103
+#define ID_BOTAO_ROSA     104
+#define ID_BOTAO_VERDE    105
+#define ID_BOTAO_ROXO     106
+#define ID_BOTAO_INICIAR  107
+
+// Handles para botões e elementos de interface
+HWND botoes[NUM_CORES];
+HWND botaoIniciar;
 
 // Funções da lista duplamente encadeada
 void inicializarLista(ListaDupla* lista) {
@@ -260,26 +274,96 @@ void criarMapa() {
     }
 }
 
-// Função para mudar a cor do fantasma
-void mudarCorFantasma(HWND hwnd) {
-    cor_fantasma = (cor_fantasma + 1) % NUM_CORES;
-    char mensagem[100];
-    sprintf(mensagem, "Cor do fantasma alterada para: %s", NOMES_CORES[cor_fantasma]);
-    SetWindowText(hwnd, mensagem);
+// Função para iniciar o jogo
+void iniciarJogo(HWND hwnd) {
+    jogoIniciado = TRUE;
+    
+    // Remove os botões do menu
+    for (int i = 0; i < NUM_CORES; i++) {
+        DestroyWindow(botoes[i]);
+    }
+    DestroyWindow(botaoIniciar);
+    
+    // Inicializa o mapa
+    criarMapa();
+    
+    // Configura um timer para mover o Pac-Man
+    SetTimer(hwnd, 1, 200, NULL);
+    
+    // Atualiza a janela
+    char titulo[100];
+    sprintf(titulo, "Nam-Pac - Jogo em andamento - Fantasma: %s", NOMES_CORES[cor_fantasma]);
+    SetWindowText(hwnd, titulo);
     InvalidateRect(hwnd, NULL, TRUE);
+}
+
+// Função para criar os botões do menu
+void criarMenu(HWND hwnd) {
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    int larguraBotao = 150;
+    int alturaBotao = 40;
+    int espacamento = 20; // Diminuído o espaçamento entre botões
+    int xInicial = (LARGURA - larguraBotao) / 2;
+    int yInicial = 200; // Posição inicial dos botões mais perto do topo
+    
+    // Cria os botões para cada cor
+    for (int i = 0; i < NUM_CORES; i++) {
+        botoes[i] = CreateWindow(
+            "BUTTON", NOMES_CORES[i],
+            WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+            xInicial, yInicial + (i * (alturaBotao + espacamento)),
+            larguraBotao, alturaBotao,
+            hwnd, (HMENU)(ID_BOTAO_VERMELHO + i), hInstance, NULL
+        );
+    }
+    
+    // Cria o botão de iniciar
+    botaoIniciar = CreateWindow(
+        "BUTTON", "Iniciar Jogo",
+        WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        xInicial, yInicial + (NUM_CORES * (alturaBotao + espacamento)),
+        larguraBotao, alturaBotao,
+        hwnd, (HMENU)ID_BOTAO_INICIAR, hInstance, NULL
+    );
+    
+    // Define o primeiro botão (vermelho) como selecionado por padrão
+    SendMessage(botoes[0], BM_SETSTYLE, BS_DEFPUSHBUTTON, TRUE);
 }
 
 // Procedimento para desenhar
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE:
-        // Inicializa o mapa
-        criarMapa();
-        // Configura um timer para mover o Pac-Man (mais rápido)
-        SetTimer(hwnd, 1, 200, NULL); // A cada 200ms (em vez de 300ms)
+        // Inicializa o menu
+        criarMenu(hwnd);
+        break;
+
+    case WM_COMMAND:
+        // Verifica qual botão foi pressionado
+        if (LOWORD(wParam) >= ID_BOTAO_VERMELHO && LOWORD(wParam) <= ID_BOTAO_ROXO) {
+            // Atualiza a cor do fantasma
+            cor_fantasma = (CorFantasma)(LOWORD(wParam) - ID_BOTAO_VERMELHO);
+            
+            // Destaca o botão selecionado e desmarca os outros
+            for (int i = 0; i < NUM_CORES; i++) {
+                SendMessage(botoes[i], BM_SETSTYLE, 
+                           (i == cor_fantasma) ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON, TRUE);
+            }
+            
+            // Atualiza a mensagem na barra de título
+            char titulo[100];
+            sprintf(titulo, "Nam-Pac - Cor selecionada: %s", NOMES_CORES[cor_fantasma]);
+            SetWindowText(hwnd, titulo);
+        } 
+        else if (LOWORD(wParam) == ID_BOTAO_INICIAR) {
+            // Inicia o jogo
+            iniciarJogo(hwnd);
+        }
         break;
 
     case WM_TIMER:
+        if (!jogoIniciado) break;
+        
         // Move o Pac-Man
         moverPacman();
         
@@ -301,6 +385,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
 
     case WM_KEYDOWN:
+        if (!jogoIniciado) break;
+        
         // Controla o movimento do fantasma (mais lento)
         movimento_fantasma++;
         if (movimento_fantasma < 2) { // Movimento a cada 2 pressionamentos
@@ -317,7 +403,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case VK_RIGHT: nova_x += 1; break;
         case VK_UP:    nova_y -= 1; break;
         case VK_DOWN:  nova_y += 1; break;
-        case 'C':      mudarCorFantasma(hwnd); break; // Pressione 'C' para mudar a cor
         }
         
         // Verifica colisão com paredes
@@ -379,79 +464,113 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         FillRect(hdc, &ps.rcPaint, blackBrush);
         DeleteObject(blackBrush);
         
-        // Desenha o mapa
-        Node* atual = mapa.primeiro;
-        do {
-            RECT celula = { 
-                atual->x * TAMANHO_CELULA, 
-                atual->y * TAMANHO_CELULA, 
-                (atual->x + 1) * TAMANHO_CELULA, 
-                (atual->y + 1) * TAMANHO_CELULA 
-            };
-            
-            // Desenha com base no tipo
-            switch (atual->tipo) {
-            case 0: // Caminho vazio
-                // Não desenha nada (fica preto)
-                break;
-            case 1: { // Parede
-                HBRUSH blueBrush = CreateSolidBrush(RGB(0, 0, 180));
-                FillRect(hdc, &celula, blueBrush);
-                DeleteObject(blueBrush);
-                break;
-            }
-            case 2: { // Comida
-                HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
-                RECT comida = {
-                    atual->x * TAMANHO_CELULA + TAMANHO_CELULA/3,
-                    atual->y * TAMANHO_CELULA + TAMANHO_CELULA/3,
-                    atual->x * TAMANHO_CELULA + 2*TAMANHO_CELULA/3,
-                    atual->y * TAMANHO_CELULA + 2*TAMANHO_CELULA/3
+        if (jogoIniciado) {
+            // Desenha o mapa
+            Node* atual = mapa.primeiro;
+            do {
+                RECT celula = { 
+                    atual->x * TAMANHO_CELULA, 
+                    atual->y * TAMANHO_CELULA, 
+                    (atual->x + 1) * TAMANHO_CELULA, 
+                    (atual->y + 1) * TAMANHO_CELULA 
                 };
-                FillRect(hdc, &comida, whiteBrush);
-                DeleteObject(whiteBrush);
-                break;
-            }
-            case 3: { // Portal
-                HBRUSH portalBrush = CreateSolidBrush(RGB(255, 0, 255));
-                FillRect(hdc, &celula, portalBrush);
-                DeleteObject(portalBrush);
-                break;
-            }
-            }
+                
+                // Desenha com base no tipo
+                switch (atual->tipo) {
+                case 0: // Caminho vazio
+                    // Não desenha nada (fica preto)
+                    break;
+                case 1: { // Parede
+                    HBRUSH blueBrush = CreateSolidBrush(RGB(0, 0, 180));
+                    FillRect(hdc, &celula, blueBrush);
+                    DeleteObject(blueBrush);
+                    break;
+                }
+                case 2: { // Comida
+                    HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+                    RECT comida = {
+                        atual->x * TAMANHO_CELULA + TAMANHO_CELULA/3,
+                        atual->y * TAMANHO_CELULA + TAMANHO_CELULA/3,
+                        atual->x * TAMANHO_CELULA + 2*TAMANHO_CELULA/3,
+                        atual->y * TAMANHO_CELULA + 2*TAMANHO_CELULA/3
+                    };
+                    FillRect(hdc, &comida, whiteBrush);
+                    DeleteObject(whiteBrush);
+                    break;
+                }
+                case 3: { // Portal
+                    HBRUSH portalBrush = CreateSolidBrush(RGB(255, 0, 255));
+                    FillRect(hdc, &celula, portalBrush);
+                    DeleteObject(portalBrush);
+                    break;
+                }
+                }
+                
+                atual = atual->prox;
+            } while (atual != mapa.primeiro);
             
-            atual = atual->prox;
-        } while (atual != mapa.primeiro);
-        
-        // Desenha o Pac-Man (amarelo)
-        HBRUSH yellowBrush = CreateSolidBrush(RGB(255, 255, 0));
-        RECT pacmanRect = {
-            pacman_x * TAMANHO_CELULA,
-            pacman_y * TAMANHO_CELULA,
-            (pacman_x + 1) * TAMANHO_CELULA,
-            (pacman_y + 1) * TAMANHO_CELULA
-        };
-        FillRect(hdc, &pacmanRect, yellowBrush);
-        DeleteObject(yellowBrush);
-        
-        // Desenha o fantasma (com a cor selecionada)
-        HBRUSH fantBrush = CreateSolidBrush(VALORES_CORES[cor_fantasma]);
-        RECT fantasmaRect = {
-            fantasma_x * TAMANHO_CELULA,
-            fantasma_y * TAMANHO_CELULA,
-            (fantasma_x + 1) * TAMANHO_CELULA,
-            (fantasma_y + 1) * TAMANHO_CELULA
-        };
-        FillRect(hdc, &fantasmaRect, fantBrush);
-        DeleteObject(fantBrush);
-        
-        // Desenha a pontuação e cor atual
-        char scoreText[100];
-        sprintf(scoreText, "Pontuação: %d | Cor do Fantasma: %s (Pressione 'C' para mudar)", 
-                pontuacao, NOMES_CORES[cor_fantasma]);
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
+            // Desenha o Pac-Man (amarelo)
+            HBRUSH yellowBrush = CreateSolidBrush(RGB(255, 255, 0));
+            RECT pacmanRect = {
+                pacman_x * TAMANHO_CELULA,
+                pacman_y * TAMANHO_CELULA,
+                (pacman_x + 1) * TAMANHO_CELULA,
+                (pacman_y + 1) * TAMANHO_CELULA
+            };
+            FillRect(hdc, &pacmanRect, yellowBrush);
+            DeleteObject(yellowBrush);
+            
+            // Desenha o fantasma (com a cor selecionada)
+            HBRUSH fantBrush = CreateSolidBrush(VALORES_CORES[cor_fantasma]);
+            RECT fantasmaRect = {
+                fantasma_x * TAMANHO_CELULA,
+                fantasma_y * TAMANHO_CELULA,
+                (fantasma_x + 1) * TAMANHO_CELULA,
+                (fantasma_y + 1) * TAMANHO_CELULA
+            };
+            FillRect(hdc, &fantasmaRect, fantBrush);
+            DeleteObject(fantBrush);
+            
+            // Desenha a pontuação
+            char scoreText[100];
+            sprintf(scoreText, "Pontuação: %d | Fantasma: %s", pontuacao, NOMES_CORES[cor_fantasma]);
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 255));
+            TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
+        } else {
+            // Desenha o menu inicial
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 0)); // Texto amarelo
+            
+            // Título principal grande
+            HFONT fonteTitulo = CreateFont(50, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                         DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
+                                         CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                                         DEFAULT_PITCH | FF_SWISS, "Arial");
+            HFONT fonteAntiga = (HFONT)SelectObject(hdc, fonteTitulo);
+            
+            char tituloJogo[] = "Nam-Pac";
+            RECT areaTexto = {0, 50, LARGURA, 120}; // Ajustado a posição do título
+            DrawText(hdc, tituloJogo, -1, &areaTexto, DT_CENTER | DT_SINGLELINE);
+            
+            // Subtítulo
+            SelectObject(hdc, fonteAntiga);
+            DeleteObject(fonteTitulo);
+            
+            HFONT fonteSubtitulo = CreateFont(24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
+                                            CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                                            DEFAULT_PITCH | FF_SWISS, "Arial");
+            fonteAntiga = (HFONT)SelectObject(hdc, fonteSubtitulo);
+            
+            char subtitulo[] = "Selecione a cor do fantasma e inicie o jogo";
+            areaTexto.top = 130; // Ajustado a posição do subtítulo
+            areaTexto.bottom = 170;
+            DrawText(hdc, subtitulo, -1, &areaTexto, DT_CENTER | DT_SINGLELINE);
+            
+            SelectObject(hdc, fonteAntiga);
+            DeleteObject(fonteSubtitulo);
+        }
         
         EndPaint(hwnd, &ps);
         break;
@@ -496,7 +615,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     HWND hwnd = CreateWindowEx(
         0,
         CLASS_NAME,
-        "Pac-Man Inverso - Você é o Fantasma!",
+        "Nam-Pac - Cor selecionada: Vermelho", // Título inicial mostrando a cor padrão
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, LARGURA + 16, ALTURA + 38,
         NULL, NULL, hInstance, NULL
