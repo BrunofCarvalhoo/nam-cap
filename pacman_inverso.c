@@ -14,7 +14,7 @@
 // Estrutura para o nó da lista duplamente encadeada
 typedef struct Node {
     int x, y;
-    int tipo; // 0: caminho vazio, 1: parede, 2: comida, 3: portal
+    int tipo; // 0: caminho vazio, 1: parede, 2: comida, 3: portal, 4: fruta rosa
     struct Node* prox;
     struct Node* ant;
 } Node;
@@ -73,6 +73,9 @@ int direcao_pacman = 0; // 0: direita, 1: cima, 2: esquerda, 3: baixo
 CorFantasma cor_fantasma = VERMELHO; // Cor inicial do fantasma
 int movimento_fantasma = 0; // Contador para retardar o movimento do fantasma
 BOOL jogoIniciado = FALSE; // Flag para controlar o início do jogo
+BOOL pacman_poderoso = FALSE; // Flag para indicar se o Pac-Man comeu uma fruta rosa
+DWORD tempoPoder = 0; // Tempo em que o poder começou
+int proximaFruta = 0; // Contador para próxima aparição de fruta rosa
 
 ListaDupla mapa;
 int pontuacao = 0;
@@ -178,32 +181,96 @@ Node* encontrarComidaProxima(int x, int y) {
     
     Node* atual = mapa.primeiro;
     Node* comidaProxima = NULL;
-    int menorDistancia = INT_MAX;
+    Node* frutaProxima = NULL;
+    int menorDistanciaComida = INT_MAX;
+    int menorDistanciaFruta = INT_MAX;
     
     do {
-        if (atual->tipo == 2) { // Se for comida
+        if (atual->tipo == 2) { // Se for comida normal
             int distancia = calcularDistancia(x, y, atual->x, atual->y);
-            if (distancia < menorDistancia) {
-                menorDistancia = distancia;
+            if (distancia < menorDistanciaComida) {
+                menorDistanciaComida = distancia;
                 comidaProxima = atual;
+            }
+        } else if (atual->tipo == 4) { // Se for fruta rosa
+            int distancia = calcularDistancia(x, y, atual->x, atual->y);
+            if (distancia < menorDistanciaFruta) {
+                menorDistanciaFruta = distancia;
+                frutaProxima = atual;
             }
         }
         atual = atual->prox;
     } while (atual != mapa.primeiro);
+    
+    // Prioriza frutas rosas sobre comidas normais
+    if (frutaProxima != NULL) {
+        return frutaProxima;
+    }
     
     return comidaProxima;
 }
 
 // Função para mover o Pac-Man
 void moverPacman() {
+    // Verifica se o poder da fruta rosa expirou
+    if (pacman_poderoso) {
+        DWORD tempoAtual = GetTickCount();
+        if (tempoAtual - tempoPoder > 3000) { // 3 segundos
+            pacman_poderoso = FALSE;
+        }
+    }
+
     // Verifica se o fantasma está próximo (distância de 5 células)
     int distanciaFantasma = calcularDistancia(pacman_x, pacman_y, fantasma_x, fantasma_y);
     int nova_x = pacman_x;
     int nova_y = pacman_y;
     int melhor_direcao = direcao_pacman;
     
-    // Se o fantasma estiver próximo, tenta fugir
-    if (distanciaFantasma <= 5) {
+    // Verifica se o pacman está em modo poderoso
+    if (pacman_poderoso) {
+        // Vai em direção ao fantasma quando está poderoso
+        if (fantasma_x > pacman_x && !ehParede(pacman_x + 1, pacman_y)) {
+            melhor_direcao = 0; // Direita
+            nova_x = pacman_x + 1;
+        } else if (fantasma_x < pacman_x && !ehParede(pacman_x - 1, pacman_y)) {
+            melhor_direcao = 2; // Esquerda
+            nova_x = pacman_x - 1;
+        } else if (fantasma_y > pacman_y && !ehParede(pacman_x, pacman_y + 1)) {
+            melhor_direcao = 3; // Baixo
+            nova_y = pacman_y + 1;
+        } else if (fantasma_y < pacman_y && !ehParede(pacman_x, pacman_y - 1)) {
+            melhor_direcao = 1; // Cima
+            nova_y = pacman_y - 1;
+        } else {
+            // Tenta encontrar um caminho alternativo
+            int direcoes_tentadas[4] = {0};
+            int contador_tentativas = 0;
+            
+            while (contador_tentativas < 4) {
+                int dir = rand() % 4;
+                if (direcoes_tentadas[dir]) continue;
+                direcoes_tentadas[dir] = 1;
+                contador_tentativas++;
+                
+                nova_x = pacman_x;
+                nova_y = pacman_y;
+                
+                switch (dir) {
+                    case 0: nova_x += 1; break; // Direita
+                    case 1: nova_y -= 1; break; // Cima
+                    case 2: nova_x -= 1; break; // Esquerda
+                    case 3: nova_y += 1; break; // Baixo
+                }
+                
+                if (!ehParede(nova_x, nova_y)) {
+                    melhor_direcao = dir;
+                    break;
+                }
+            }
+        }
+    }
+    // Se o fantasma estiver próximo e o pacman não estiver poderoso, tenta fugir
+    else if (distanciaFantasma <= 5) {
         // Tenta encontrar a direção que aumenta a distância do fantasma
         int maiorDistancia = -1;
         
@@ -231,23 +298,50 @@ void moverPacman() {
             }
         }
     } else {
-        // Se não estiver em perigo, procura comida
+        // Se não estiver em perigo, procura comida ou frutas
         Node* comidaProxima = encontrarComidaProxima(pacman_x, pacman_y);
         
         if (comidaProxima) {
-            // Tenta se mover em direção à comida
-            if (comidaProxima->x > pacman_x && !ehParede(pacman_x + 1, pacman_y)) {
-                melhor_direcao = 0; // Direita
-                nova_x = pacman_x + 1;
-            } else if (comidaProxima->x < pacman_x && !ehParede(pacman_x - 1, pacman_y)) {
-                melhor_direcao = 2; // Esquerda
-                nova_x = pacman_x - 1;
-            } else if (comidaProxima->y > pacman_y && !ehParede(pacman_x, pacman_y + 1)) {
-                melhor_direcao = 3; // Baixo
-                nova_y = pacman_y + 1;
-            } else if (comidaProxima->y < pacman_y && !ehParede(pacman_x, pacman_y - 1)) {
-                melhor_direcao = 1; // Cima
-                nova_y = pacman_y - 1;
+            // Algoritmo para contornar paredes e se aproximar do alvo
+            int melhor_movimento = -1;
+            int melhor_distancia = INT_MAX;
+            
+            // Verifica todas as direções possíveis
+            for (int dir = 0; dir < 4; dir++) {
+                int test_x = pacman_x;
+                int test_y = pacman_y;
+                
+                switch (dir) {
+                    case 0: test_x += 1; break; // Direita
+                    case 1: test_y -= 1; break; // Cima
+                    case 2: test_x -= 1; break; // Esquerda
+                    case 3: test_y += 1; break; // Baixo
+                }
+                
+                // Verifica se pode mover para esta posição
+                if (!ehParede(test_x, test_y)) {
+                    int distancia = calcularDistancia(test_x, test_y, comidaProxima->x, comidaProxima->y);
+                    
+                    // Se estiver em um beco sem saída, evita voltar nessa direção
+                    if (direcao_pacman == (dir + 2) % 4) {
+                        distancia += 2; // Penalidade por dar meia volta
+                    }
+                    
+                    if (distancia < melhor_distancia) {
+                        melhor_distancia = distancia;
+                        melhor_movimento = dir;
+                    }
+                }
+            }
+            
+            if (melhor_movimento != -1) {
+                melhor_direcao = melhor_movimento;
+                switch (melhor_direcao) {
+                    case 0: nova_x = pacman_x + 1; break; // Direita
+                    case 1: nova_y = pacman_y - 1; break; // Cima
+                    case 2: nova_x = pacman_x - 1; break; // Esquerda
+                    case 3: nova_y = pacman_y + 1; break; // Baixo
+                }
             }
         }
     }
@@ -282,6 +376,13 @@ void moverPacman() {
                 destino->tipo = 0;  // Remove a comida
                 pontuacao += 10;
                 comidas_restantes--;
+            } 
+            // Se for fruta rosa, come e fica poderoso
+            else if (destino->tipo == 4) {
+                destino->tipo = 0;  // Remove a fruta
+                pacman_poderoso = TRUE;
+                tempoPoder = GetTickCount(); // Marca o tempo atual
+                pontuacao += 50;
             }
         }
     } else if (!ehParede(nova_x, nova_y)) {
@@ -331,6 +432,39 @@ void criarMapa() {
             }
         }
     }
+    
+    // Inicializa o contador de frutas
+    proximaFruta = 100; // Primeira fruta aparecerá após um tempo
+}
+
+// Função para gerar frutas rosas aleatoriamente
+void gerarFrutaRosa() {
+    // Encontra uma posição vazia para colocar a fruta
+    int x, y;
+    BOOL posicaoValida = FALSE;
+    int tentativas = 0;
+    
+    while (!posicaoValida && tentativas < 100) {
+        x = rand() % (COLUNAS - 2) + 1;
+        y = rand() % (LINHAS - 2) + 1;
+        
+        // Verifica se a posição é válida (não é parede, comida, portal, etc.)
+        if (!ehParede(x, y)) {
+            Node* no = buscarNo(&mapa, x, y);
+            if (no && no->tipo == 0) { // Posição vazia
+                no->tipo = 4; // Converte para fruta rosa
+                posicaoValida = TRUE;
+            } else if (!no) {
+                // Se o nó não existe, cria um novo para a fruta
+                inserirFim(&mapa, x, y, 4);
+                posicaoValida = TRUE;
+            }
+        }
+        tentativas++;
+    }
+    
+    // Reseta o contador de próxima fruta (entre 10 e 20 segundos)
+    proximaFruta = 100 + (rand() % 100);
 }
 
 // Função para iniciar o jogo
@@ -372,7 +506,7 @@ void criarMenu(HWND hwnd) {
             WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
             xInicial, yInicial + (i * (alturaBotao + espacamento)),
             larguraBotao, alturaBotao,
-            hwnd, (HMENU)(ID_BOTAO_VERMELHO + i), hInstance, NULL
+            hwnd, (HMENU)(LONG_PTR)(ID_BOTAO_VERMELHO + i), hInstance, NULL
         );
     }
     
@@ -382,7 +516,7 @@ void criarMenu(HWND hwnd) {
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         xInicial, yInicial + (NUM_CORES * (alturaBotao + espacamento)),
         larguraBotao, alturaBotao,
-        hwnd, (HMENU)ID_BOTAO_INICIAR, hInstance, NULL
+        hwnd, (HMENU)(LONG_PTR)ID_BOTAO_INICIAR, hInstance, NULL
     );
     
     // Define o primeiro botão (vermelho) como selecionado por padrão
@@ -424,14 +558,28 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_TIMER:
         if (!jogoIniciado) break;
         
+        // Atualiza o contador para gerar frutas rosas
+        proximaFruta--;
+        if (proximaFruta <= 0) {
+            gerarFrutaRosa();
+        }
+        
         // Move o Pac-Man
         moverPacman();
         
         // Verifica colisão entre Pac-Man e fantasma
         if (fantasma_x == pacman_x && fantasma_y == pacman_y) {
-            KillTimer(hwnd, 1);
-            MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
-            PostQuitMessage(0);
+            if (pacman_poderoso) {
+                // Pacman venceu ao pegar o fantasma quando poderoso
+                KillTimer(hwnd, 1);
+                MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
+                PostQuitMessage(0);
+            } else {
+                // Fantasma capturou o Pacman
+                KillTimer(hwnd, 1);
+                MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
+                PostQuitMessage(0);
+            }
         }
         
         // Verifica se todas as comidas foram consumidas
@@ -446,6 +594,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_KEYDOWN:
         if (!jogoIniciado) break;
+        
+        // Troca a cor do fantasma se pressionar 'C'
+        if (wParam == 'C' || wParam == 'c') {
+            cor_fantasma = (cor_fantasma + 1) % NUM_CORES;
+            char titulo[100];
+            sprintf(titulo, "Nam-Pac - Jogo em andamento - Fantasma: %s", NOMES_CORES[cor_fantasma]);
+            SetWindowText(hwnd, titulo);
+            InvalidateRect(hwnd, NULL, TRUE);
+            break;
+        }
         
         // Controla o movimento do fantasma (mais lento)
         movimento_fantasma++;
@@ -495,9 +653,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             // Verifica colisão entre Pac-Man e fantasma
             if (fantasma_x == pacman_x && fantasma_y == pacman_y) {
-                KillTimer(hwnd, 1);
-                MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
-                PostQuitMessage(0);
+                if (pacman_poderoso) {
+                    // Pacman venceu ao pegar o fantasma quando poderoso
+                    KillTimer(hwnd, 1);
+                    MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
+                    PostQuitMessage(0);
+                } else {
+                    // Fantasma capturou o Pacman
+                    KillTimer(hwnd, 1);
+                    MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
+                    PostQuitMessage(0);
+                }
             }
         } else if (!ehParede(nova_x, nova_y)) {
             // Se não há nó no destino mas não é parede, pode mover
@@ -506,9 +672,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             // Verifica colisão entre Pac-Man e fantasma
             if (fantasma_x == pacman_x && fantasma_y == pacman_y) {
-                KillTimer(hwnd, 1);
-                MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
-                PostQuitMessage(0);
+                if (pacman_poderoso) {
+                    // Pacman venceu ao pegar o fantasma quando poderoso
+                    KillTimer(hwnd, 1);
+                    MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
+                    PostQuitMessage(0);
+                } else {
+                    // Fantasma capturou o Pacman
+                    KillTimer(hwnd, 1);
+                    MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
+                    PostQuitMessage(0);
+                }
             }
         }
         
@@ -548,13 +722,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
                 case 2: { // Comida
                     HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
-                    RECT comida = {
-                        atual->x * TAMANHO_CELULA + TAMANHO_CELULA/3,
-                        atual->y * TAMANHO_CELULA + TAMANHO_CELULA/3,
-                        atual->x * TAMANHO_CELULA + 2*TAMANHO_CELULA/3,
-                        atual->y * TAMANHO_CELULA + 2*TAMANHO_CELULA/3
-                    };
-                    FillRect(hdc, &comida, whiteBrush);
+                    // Desenhar um círculo pequeno para a comida
+                    int raio = TAMANHO_CELULA / 6;
+                    int centroX = atual->x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                    int centroY = atual->y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                    SelectObject(hdc, whiteBrush);
+                    Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
                     DeleteObject(whiteBrush);
                     break;
                 }
@@ -564,36 +737,77 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     DeleteObject(portalBrush);
                     break;
                 }
+                case 4: { // Fruta rosa
+                    HBRUSH rosaBrush = CreateSolidBrush(RGB(255, 20, 147)); // Rosa forte
+                    // Desenhar um círculo maior para a fruta
+                    int raio = TAMANHO_CELULA / 3;
+                    int centroX = atual->x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                    int centroY = atual->y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                    SelectObject(hdc, rosaBrush);
+                    Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
+                    DeleteObject(rosaBrush);
+                    break;
+                }
                 }
                 
                 atual = atual->prox;
             } while (atual != mapa.primeiro);
             
-            // Desenha o Pac-Man (amarelo)
+            // Desenha o Pac-Man (amarelo) como um círculo
             HBRUSH yellowBrush = CreateSolidBrush(RGB(255, 255, 0));
-            RECT pacmanRect = {
-                pacman_x * TAMANHO_CELULA,
-                pacman_y * TAMANHO_CELULA,
-                (pacman_x + 1) * TAMANHO_CELULA,
-                (pacman_y + 1) * TAMANHO_CELULA
-            };
-            FillRect(hdc, &pacmanRect, yellowBrush);
+            int centroX = pacman_x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+            int centroY = pacman_y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+            int raio = TAMANHO_CELULA / 2 - 2; // Um pouco menor que a célula
+            
+            SelectObject(hdc, yellowBrush);
+            Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
             DeleteObject(yellowBrush);
             
-            // Desenha o fantasma (com a cor selecionada)
+            // Desenha o fantasma (com a cor selecionada) como um círculo
             HBRUSH fantBrush = CreateSolidBrush(VALORES_CORES[cor_fantasma]);
-            RECT fantasmaRect = {
-                fantasma_x * TAMANHO_CELULA,
-                fantasma_y * TAMANHO_CELULA,
-                (fantasma_x + 1) * TAMANHO_CELULA,
-                (fantasma_y + 1) * TAMANHO_CELULA
-            };
-            FillRect(hdc, &fantasmaRect, fantBrush);
-            DeleteObject(fantBrush);
+            centroX = fantasma_x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+            centroY = fantasma_y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
             
-            // Desenha a pontuação
-            char scoreText[100];
-            sprintf(scoreText, "Pontuação: %d | Fantasma: %s", pontuacao, NOMES_CORES[cor_fantasma]);
+            SelectObject(hdc, fantBrush);
+            Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
+            
+            // Desenha os olhos do fantasma
+            HBRUSH olhoBrush = CreateSolidBrush(RGB(255, 255, 255));
+            SelectObject(hdc, olhoBrush);
+            
+            // Olho esquerdo
+            int raioOlho = TAMANHO_CELULA / 10;
+            int olhoEsqX = centroX - raio/2;
+            int olhoY = centroY - raio/4;
+            Ellipse(hdc, olhoEsqX - raioOlho, olhoY - raioOlho, 
+                   olhoEsqX + raioOlho, olhoY + raioOlho);
+            
+            // Olho direito
+            int olhoDirX = centroX + raio/2;
+            Ellipse(hdc, olhoDirX - raioOlho, olhoY - raioOlho, 
+                   olhoDirX + raioOlho, olhoY + raioOlho);
+            
+            // Pupila dos olhos (preta)
+            HBRUSH pupilaBrush = CreateSolidBrush(RGB(0, 0, 0));
+            SelectObject(hdc, pupilaBrush);
+            
+            int raioPupila = TAMANHO_CELULA / 20;
+            Ellipse(hdc, olhoEsqX - raioPupila, olhoY - raioPupila, 
+                   olhoEsqX + raioPupila, olhoY + raioPupila);
+            Ellipse(hdc, olhoDirX - raioPupila, olhoY - raioPupila, 
+                   olhoDirX + raioPupila, olhoY + raioPupila);
+            
+            DeleteObject(fantBrush);
+            DeleteObject(olhoBrush);
+            DeleteObject(pupilaBrush);
+            
+            // Desenha a pontuação e status do poder
+            char scoreText[150];
+            if (pacman_poderoso) {
+                sprintf(scoreText, "Pontuação: %d | Fantasma: %s | PACMAN PODEROSO!", pontuacao, NOMES_CORES[cor_fantasma]);
+            } else {
+                sprintf(scoreText, "Pontuação: %d | Fantasma: %s", pontuacao, NOMES_CORES[cor_fantasma]);
+            }
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(255, 255, 255));
             TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
