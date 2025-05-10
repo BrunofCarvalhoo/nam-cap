@@ -10,6 +10,14 @@
 #define TAMANHO_CELULA 35  // Células maiores para labirinto mais espaçado
 #define LINHAS (ALTURA / TAMANHO_CELULA)
 #define COLUNAS (LARGURA / TAMANHO_CELULA)
+#define MAX_RANKING 10 // Máximo de jogadores no ranking
+#define MAX_NOME 50 // Tamanho máximo do nome do jogador
+
+// Estrutura para o ranking
+typedef struct {
+    char nome[MAX_NOME];
+    int pontuacao; // Comida restante
+} JogadorRanking;
 
 // Estrutura para o nó da lista duplamente encadeada
 typedef struct Node {
@@ -76,6 +84,15 @@ BOOL jogoIniciado = FALSE; // Flag para controlar o início do jogo
 BOOL pacman_poderoso = FALSE; // Flag para indicar se o Pac-Man comeu uma fruta rosa
 DWORD tempoPoder = 0; // Tempo em que o poder começou
 int proximaFruta = 0; // Contador para próxima aparição de fruta rosa
+int totalComidas = 0; // Total de comidas no início do jogo
+
+// Variáveis para o ranking
+JogadorRanking ranking[MAX_RANKING];
+int numJogadoresRanking = 0;
+HWND caixaNome; // Caixa de texto para entrada do nome
+HWND botaoEnviar; // Botão para submeter o nome
+BOOL mostrarTelaRanking = FALSE;
+int comidaRestante = 0; // Comida não consumida pelo Pacman
 
 ListaDupla mapa;
 int pontuacao = 0;
@@ -424,11 +441,15 @@ void criarMapa() {
     posicoes_ocupadas[pacman_x][pacman_y] = 1;
     posicoes_ocupadas[fantasma_x][fantasma_y] = 1;
 
+    // Contador de comidas para o ranking
+    totalComidas = 0;
+    
     // Agora adiciona comidas apenas em posições vazias e que NÃO são paredes
     for (int x = 1; x < COLUNAS - 1; x++) {
         for (int y = 1; y < LINHAS - 1; y++) {
             if (!posicoes_ocupadas[x][y] && !ehParede(x, y)) {
                 inserirFim(&mapa, x, y, 2); // Comida
+                totalComidas++; // Aumenta o contador de comidas total
             }
         }
     }
@@ -523,6 +544,179 @@ void criarMenu(HWND hwnd) {
     SendMessage(botoes[0], BM_SETSTYLE, BS_DEFPUSHBUTTON, TRUE);
 }
 
+// Função para trocar dois elementos do ranking
+void trocarJogadores(JogadorRanking* a, JogadorRanking* b) {
+    JogadorRanking temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// Função partição do QuickSort
+int particionar(JogadorRanking arr[], int baixo, int alto) {
+    // Usando o último elemento como pivô
+    int pivo = arr[alto].pontuacao;
+    int i = (baixo - 1);
+    
+    for (int j = baixo; j <= alto - 1; j++) {
+        // Se o elemento atual for maior ou igual ao pivô
+        // Queremos ordenar em ordem decrescente (maior comida restante = melhor pontuação)
+        if (arr[j].pontuacao >= pivo) {
+            i++;
+            trocarJogadores(&arr[i], &arr[j]);
+        }
+    }
+    trocarJogadores(&arr[i + 1], &arr[alto]);
+    return (i + 1);
+}
+
+// Função QuickSort para ordenar o ranking
+void quickSort(JogadorRanking arr[], int baixo, int alto) {
+    if (baixo < alto) {
+        int pi = particionar(arr, baixo, alto);
+        
+        quickSort(arr, baixo, pi - 1);
+        quickSort(arr, pi + 1, alto);
+    }
+}
+
+// Função para carregar o ranking do arquivo
+void carregarRanking() {
+    FILE* arquivo = fopen("ranking.txt", "r");
+    if (arquivo == NULL) {
+        // Se o arquivo não existe, inicializa um ranking vazio
+        numJogadoresRanking = 0;
+        return;
+    }
+    
+    // Lê o número de jogadores
+    fscanf(arquivo, "%d\n", &numJogadoresRanking);
+    
+    // Lê cada jogador
+    for (int i = 0; i < numJogadoresRanking && i < MAX_RANKING; i++) {
+        fscanf(arquivo, "%[^,],%d\n", ranking[i].nome, &ranking[i].pontuacao);
+    }
+    
+    fclose(arquivo);
+}
+
+// Função para salvar o ranking no arquivo
+void salvarRanking() {
+    FILE* arquivo = fopen("ranking.txt", "w");
+    if (arquivo == NULL) {
+        MessageBox(NULL, "Erro ao salvar o ranking!", "Erro", MB_OK | MB_ICONERROR);
+        return;
+    }
+    
+    // Ordena o ranking antes de salvar
+    quickSort(ranking, 0, numJogadoresRanking - 1);
+    
+    // Escreve o número de jogadores
+    fprintf(arquivo, "%d\n", numJogadoresRanking);
+    
+    // Escreve cada jogador
+    for (int i = 0; i < numJogadoresRanking; i++) {
+        fprintf(arquivo, "%s,%d\n", ranking[i].nome, ranking[i].pontuacao);
+    }
+    
+    fclose(arquivo);
+}
+
+// Função para adicionar um jogador ao ranking
+void adicionarJogadorAoRanking(const char* nome, int pontuacao) {
+    // Verifica se o ranking está cheio
+    if (numJogadoresRanking >= MAX_RANKING) {
+        // Encontra o jogador com pontuação mais baixa (pior)
+        int indiceMenorPontuacao = 0;
+        for (int i = 1; i < numJogadoresRanking; i++) {
+            if (ranking[i].pontuacao < ranking[indiceMenorPontuacao].pontuacao) {
+                indiceMenorPontuacao = i;
+            }
+        }
+        
+        // Se o novo jogador tem pontuação maior (melhor), substitui o pior
+        if (pontuacao > ranking[indiceMenorPontuacao].pontuacao) {
+            strcpy(ranking[indiceMenorPontuacao].nome, nome);
+            ranking[indiceMenorPontuacao].pontuacao = pontuacao;
+        }
+    } else {
+        // Adiciona o novo jogador
+        strcpy(ranking[numJogadoresRanking].nome, nome);
+        ranking[numJogadoresRanking].pontuacao = pontuacao;
+        numJogadoresRanking++;
+    }
+    
+    // Ordena e salva o ranking
+    quickSort(ranking, 0, numJogadoresRanking - 1);
+    salvarRanking();
+}
+
+// Função para criar a tela de entrada do nome
+void criarTelaEntradaNome(HWND hwnd) {
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    
+    // Cria a caixa de texto para entrada do nome
+    caixaNome = CreateWindow(
+        "EDIT", "",
+        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT,
+        (LARGURA - 300) / 2, ALTURA / 2 - 50,
+        300, 30,
+        hwnd, NULL, hInstance, NULL
+    );
+    
+    // Define um texto padrão
+    SetWindowText(caixaNome, "Seu nome");
+    
+    // Cria o botão de enviar
+    botaoEnviar = CreateWindow(
+        "BUTTON", "Enviar",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        (LARGURA - 100) / 2, ALTURA / 2 + 20,
+        100, 40,
+        hwnd, (HMENU)(LONG_PTR)1001, hInstance, NULL
+    );
+    
+    mostrarTelaRanking = TRUE;
+}
+
+// Função para exibir o ranking na tela
+void exibirRanking(HDC hdc) {
+    // Configura a fonte
+    HFONT rankingFont = CreateFont(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
+                                 CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                                 DEFAULT_PITCH | FF_SWISS, "Arial");
+    HFONT oldFont = (HFONT)SelectObject(hdc, rankingFont);
+    
+    // Configura o texto
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(255, 215, 0)); // Dourado
+    
+    // Título do ranking
+    char titulo[] = "RANKING DE JOGADORES";
+    RECT tituloRect = {0, 50, LARGURA, 100};
+    DrawText(hdc, titulo, -1, &tituloRect, DT_CENTER | DT_SINGLELINE);
+    
+    // Subtítulo explicativo
+    SetTextColor(hdc, RGB(0, 255, 255)); // Ciano
+    char subtitulo[] = "Maior número de comidas restantes = Caçada mais eficiente!";
+    RECT subtituloRect = {0, 100, LARGURA, 130};
+    DrawText(hdc, subtitulo, -1, &subtituloRect, DT_CENTER | DT_SINGLELINE);
+    
+    // Lista os jogadores
+    SetTextColor(hdc, RGB(255, 255, 255)); // Branco
+    
+    char linhaRanking[100];
+    for (int i = 0; i < numJogadoresRanking; i++) {
+        sprintf(linhaRanking, "%d. %s - %d comidas restantes", i + 1, ranking[i].nome, ranking[i].pontuacao);
+        RECT jogadorRect = {(LARGURA - 400) / 2, 140 + i * 30, (LARGURA + 400) / 2, 170 + i * 30};
+        DrawText(hdc, linhaRanking, -1, &jogadorRect, DT_LEFT | DT_SINGLELINE);
+    }
+    
+    // Restaura a fonte antiga
+    SelectObject(hdc, oldFont);
+    DeleteObject(rankingFont);
+}
+
 // Procedimento para desenhar
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -553,9 +747,36 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             iniciarJogo(hwnd);
             SetTimer(hwnd, 1, 100, NULL); // Timer mais rápido para o Pac-Man
         }
+        else if (LOWORD(wParam) == 1001) { // Botão Enviar do ranking
+            // Obtém o nome digitado
+            char nomeJogador[MAX_NOME];
+            GetWindowText(caixaNome, nomeJogador, MAX_NOME);
+            
+            // Verifica se o nome não está vazio
+            if (strlen(nomeJogador) > 0) {
+                // Adiciona ao ranking
+                adicionarJogadorAoRanking(nomeJogador, comidaRestante);
+                
+                // Remove os controles
+                DestroyWindow(caixaNome);
+                DestroyWindow(botaoEnviar);
+                
+                // Atualiza a tela para mostrar apenas o ranking
+                InvalidateRect(hwnd, NULL, TRUE);
+                
+                // Adiciona um timer para sair do jogo após mostrar o ranking por alguns segundos
+                SetTimer(hwnd, 2, 5000, NULL); // Timer para sair após 5 segundos
+            }
+        }
         break;
 
     case WM_TIMER:
+        if (wParam == 2) { // Timer para sair após mostrar o ranking
+            KillTimer(hwnd, 2);
+            PostQuitMessage(0);
+            break;
+        }
+        
         if (!jogoIniciado) break;
         
         // Atualiza o contador para gerar frutas rosas
@@ -575,10 +796,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
                 PostQuitMessage(0);
             } else {
-                // Fantasma capturou o Pacman
+                // Fantasma capturou o Pacman - mostrar tela de ranking
                 KillTimer(hwnd, 1);
-                MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
-                PostQuitMessage(0);
+                
+                // Calcula comida restante para o ranking
+                comidaRestante = totalComidas - (pontuacao / 10);
+                
+                // Carrega o ranking atual
+                carregarRanking();
+                
+                // Mostra mensagem de vitória
+                char mensagem[200];
+                sprintf(mensagem, "Vitória! O fantasma capturou o Pac-Man!\nComidas restantes: %d\nDigite seu nome para o ranking.", comidaRestante);
+                MessageBox(hwnd, mensagem, "Fim de Jogo", MB_OK);
+                
+                // Cria a tela para entrada do nome
+                criarTelaEntradaNome(hwnd);
             }
         }
         
@@ -659,10 +892,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
                     PostQuitMessage(0);
                 } else {
-                    // Fantasma capturou o Pacman
+                    // Fantasma capturou o Pacman - mostrar tela de ranking
                     KillTimer(hwnd, 1);
-                    MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
-                    PostQuitMessage(0);
+                    
+                    // Calcula comida restante para o ranking
+                    comidaRestante = totalComidas - (pontuacao / 10);
+                    
+                    // Carrega o ranking atual
+                    carregarRanking();
+                    
+                    // Mostra mensagem de vitória
+                    char mensagem[200];
+                    sprintf(mensagem, "Vitória! O fantasma capturou o Pac-Man!\nComidas restantes: %d\nDigite seu nome para o ranking.", comidaRestante);
+                    MessageBox(hwnd, mensagem, "Fim de Jogo", MB_OK);
+                    
+                    // Cria a tela para entrada do nome
+                    criarTelaEntradaNome(hwnd);
                 }
             }
         } else if (!ehParede(nova_x, nova_y)) {
@@ -699,118 +944,123 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         DeleteObject(blackBrush);
         
         if (jogoIniciado) {
-            // Desenha o mapa
-            Node* atual = mapa.primeiro;
-            do {
-                RECT celula = { 
-                    atual->x * TAMANHO_CELULA, 
-                    atual->y * TAMANHO_CELULA, 
-                    (atual->x + 1) * TAMANHO_CELULA, 
-                    (atual->y + 1) * TAMANHO_CELULA 
-                };
-                
-                // Desenha com base no tipo
-                switch (atual->tipo) {
-                case 0: // Caminho vazio
-                    // Não desenha nada (fica preto)
-                    break;
-                case 1: { // Parede
-                    HBRUSH blueBrush = CreateSolidBrush(RGB(0, 0, 180));
-                    FillRect(hdc, &celula, blueBrush);
-                    DeleteObject(blueBrush);
-                    break;
-                }
-                case 2: { // Comida
-                    HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
-                    // Desenhar um círculo pequeno para a comida
-                    int raio = TAMANHO_CELULA / 6;
-                    int centroX = atual->x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-                    int centroY = atual->y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-                    SelectObject(hdc, whiteBrush);
-                    Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
-                    DeleteObject(whiteBrush);
-                    break;
-                }
-                case 3: { // Portal
-                    HBRUSH portalBrush = CreateSolidBrush(RGB(255, 0, 255));
-                    FillRect(hdc, &celula, portalBrush);
-                    DeleteObject(portalBrush);
-                    break;
-                }
-                case 4: { // Fruta rosa
-                    HBRUSH rosaBrush = CreateSolidBrush(RGB(255, 20, 147)); // Rosa forte
-                    // Desenhar um círculo maior para a fruta
-                    int raio = TAMANHO_CELULA / 3;
-                    int centroX = atual->x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-                    int centroY = atual->y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-                    SelectObject(hdc, rosaBrush);
-                    Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
-                    DeleteObject(rosaBrush);
-                    break;
-                }
-                }
-                
-                atual = atual->prox;
-            } while (atual != mapa.primeiro);
-            
-            // Desenha o Pac-Man (amarelo) como um círculo
-            HBRUSH yellowBrush = CreateSolidBrush(RGB(255, 255, 0));
-            int centroX = pacman_x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-            int centroY = pacman_y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-            int raio = TAMANHO_CELULA / 2 - 2; // Um pouco menor que a célula
-            
-            SelectObject(hdc, yellowBrush);
-            Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
-            DeleteObject(yellowBrush);
-            
-            // Desenha o fantasma (com a cor selecionada) como um círculo
-            HBRUSH fantBrush = CreateSolidBrush(VALORES_CORES[cor_fantasma]);
-            centroX = fantasma_x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-            centroY = fantasma_y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
-            
-            SelectObject(hdc, fantBrush);
-            Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
-            
-            // Desenha os olhos do fantasma
-            HBRUSH olhoBrush = CreateSolidBrush(RGB(255, 255, 255));
-            SelectObject(hdc, olhoBrush);
-            
-            // Olho esquerdo
-            int raioOlho = TAMANHO_CELULA / 10;
-            int olhoEsqX = centroX - raio/2;
-            int olhoY = centroY - raio/4;
-            Ellipse(hdc, olhoEsqX - raioOlho, olhoY - raioOlho, 
-                   olhoEsqX + raioOlho, olhoY + raioOlho);
-            
-            // Olho direito
-            int olhoDirX = centroX + raio/2;
-            Ellipse(hdc, olhoDirX - raioOlho, olhoY - raioOlho, 
-                   olhoDirX + raioOlho, olhoY + raioOlho);
-            
-            // Pupila dos olhos (preta)
-            HBRUSH pupilaBrush = CreateSolidBrush(RGB(0, 0, 0));
-            SelectObject(hdc, pupilaBrush);
-            
-            int raioPupila = TAMANHO_CELULA / 20;
-            Ellipse(hdc, olhoEsqX - raioPupila, olhoY - raioPupila, 
-                   olhoEsqX + raioPupila, olhoY + raioPupila);
-            Ellipse(hdc, olhoDirX - raioPupila, olhoY - raioPupila, 
-                   olhoDirX + raioPupila, olhoY + raioPupila);
-            
-            DeleteObject(fantBrush);
-            DeleteObject(olhoBrush);
-            DeleteObject(pupilaBrush);
-            
-            // Desenha a pontuação e status do poder
-            char scoreText[150];
-            if (pacman_poderoso) {
-                sprintf(scoreText, "Pontuação: %d | Fantasma: %s | PACMAN PODEROSO!", pontuacao, NOMES_CORES[cor_fantasma]);
+            if (mostrarTelaRanking) {
+                // Desenha o fundo para a tela de ranking
+                exibirRanking(hdc);
             } else {
-                sprintf(scoreText, "Pontuação: %d | Fantasma: %s", pontuacao, NOMES_CORES[cor_fantasma]);
+                // Desenha o mapa
+                Node* atual = mapa.primeiro;
+                do {
+                    RECT celula = { 
+                        atual->x * TAMANHO_CELULA, 
+                        atual->y * TAMANHO_CELULA, 
+                        (atual->x + 1) * TAMANHO_CELULA, 
+                        (atual->y + 1) * TAMANHO_CELULA 
+                    };
+                    
+                    // Desenha com base no tipo
+                    switch (atual->tipo) {
+                    case 0: // Caminho vazio
+                        // Não desenha nada (fica preto)
+                        break;
+                    case 1: { // Parede
+                        HBRUSH blueBrush = CreateSolidBrush(RGB(0, 0, 180));
+                        FillRect(hdc, &celula, blueBrush);
+                        DeleteObject(blueBrush);
+                        break;
+                    }
+                    case 2: { // Comida
+                        HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+                        // Desenhar um círculo pequeno para a comida
+                        int raio = TAMANHO_CELULA / 6;
+                        int centroX = atual->x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                        int centroY = atual->y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                        SelectObject(hdc, whiteBrush);
+                        Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
+                        DeleteObject(whiteBrush);
+                        break;
+                    }
+                    case 3: { // Portal
+                        HBRUSH portalBrush = CreateSolidBrush(RGB(255, 0, 255));
+                        FillRect(hdc, &celula, portalBrush);
+                        DeleteObject(portalBrush);
+                        break;
+                    }
+                    case 4: { // Fruta rosa
+                        HBRUSH rosaBrush = CreateSolidBrush(RGB(255, 20, 147)); // Rosa forte
+                        // Desenhar um círculo maior para a fruta
+                        int raio = TAMANHO_CELULA / 3;
+                        int centroX = atual->x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                        int centroY = atual->y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                        SelectObject(hdc, rosaBrush);
+                        Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
+                        DeleteObject(rosaBrush);
+                        break;
+                    }
+                    }
+                    
+                    atual = atual->prox;
+                } while (atual != mapa.primeiro);
+                
+                // Desenha o Pac-Man (amarelo) como um círculo
+                HBRUSH yellowBrush = CreateSolidBrush(RGB(255, 255, 0));
+                int centroX = pacman_x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                int centroY = pacman_y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                int raio = TAMANHO_CELULA / 2 - 2; // Um pouco menor que a célula
+                
+                SelectObject(hdc, yellowBrush);
+                Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
+                DeleteObject(yellowBrush);
+                
+                // Desenha o fantasma (com a cor selecionada) como um círculo
+                HBRUSH fantBrush = CreateSolidBrush(VALORES_CORES[cor_fantasma]);
+                centroX = fantasma_x * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                centroY = fantasma_y * TAMANHO_CELULA + TAMANHO_CELULA / 2;
+                
+                SelectObject(hdc, fantBrush);
+                Ellipse(hdc, centroX - raio, centroY - raio, centroX + raio, centroY + raio);
+                
+                // Desenha os olhos do fantasma
+                HBRUSH olhoBrush = CreateSolidBrush(RGB(255, 255, 255));
+                SelectObject(hdc, olhoBrush);
+                
+                // Olho esquerdo
+                int raioOlho = TAMANHO_CELULA / 10;
+                int olhoEsqX = centroX - raio/2;
+                int olhoY = centroY - raio/4;
+                Ellipse(hdc, olhoEsqX - raioOlho, olhoY - raioOlho, 
+                       olhoEsqX + raioOlho, olhoY + raioOlho);
+                
+                // Olho direito
+                int olhoDirX = centroX + raio/2;
+                Ellipse(hdc, olhoDirX - raioOlho, olhoY - raioOlho, 
+                       olhoDirX + raioOlho, olhoY + raioOlho);
+                
+                // Pupila dos olhos (preta)
+                HBRUSH pupilaBrush = CreateSolidBrush(RGB(0, 0, 0));
+                SelectObject(hdc, pupilaBrush);
+                
+                int raioPupila = TAMANHO_CELULA / 20;
+                Ellipse(hdc, olhoEsqX - raioPupila, olhoY - raioPupila, 
+                       olhoEsqX + raioPupila, olhoY + raioPupila);
+                Ellipse(hdc, olhoDirX - raioPupila, olhoY - raioPupila, 
+                       olhoDirX + raioPupila, olhoY + raioPupila);
+                
+                DeleteObject(fantBrush);
+                DeleteObject(olhoBrush);
+                DeleteObject(pupilaBrush);
+                
+                // Desenha a pontuação e status do poder
+                char scoreText[150];
+                if (pacman_poderoso) {
+                    sprintf(scoreText, "Pontuação: %d | Fantasma: %s | PACMAN PODEROSO!", pontuacao, NOMES_CORES[cor_fantasma]);
+                } else {
+                    sprintf(scoreText, "Pontuação: %d | Fantasma: %s", pontuacao, NOMES_CORES[cor_fantasma]);
+                }
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
             }
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255));
-            TextOut(hdc, 10, 10, scoreText, strlen(scoreText));
         } else {
             // Desenha o menu inicial
             SetBkMode(hdc, TRANSPARENT);
@@ -872,6 +1122,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // Inicializa o gerador de números aleatórios
     srand(time(NULL));
+    
+    // Carrega o ranking existente
+    carregarRanking();
     
     const char CLASS_NAME[] = "PacManInverso";
 
