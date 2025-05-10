@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <limits.h>
 
 #define LARGURA 1000
 #define ALTURA 800
@@ -166,35 +167,99 @@ int ehParede(int x, int y) {
             (x == 15 && y >= 18 && y <= 22));
 }
 
+// Função para calcular a distância entre dois pontos
+int calcularDistancia(int x1, int y1, int x2, int y2) {
+    return abs(x1 - x2) + abs(y2 - y1);
+}
+
+// Função para encontrar a comida mais próxima
+Node* encontrarComidaProxima(int x, int y) {
+    if (mapa.primeiro == NULL) return NULL;
+    
+    Node* atual = mapa.primeiro;
+    Node* comidaProxima = NULL;
+    int menorDistancia = INT_MAX;
+    
+    do {
+        if (atual->tipo == 2) { // Se for comida
+            int distancia = calcularDistancia(x, y, atual->x, atual->y);
+            if (distancia < menorDistancia) {
+                menorDistancia = distancia;
+                comidaProxima = atual;
+            }
+        }
+        atual = atual->prox;
+    } while (atual != mapa.primeiro);
+    
+    return comidaProxima;
+}
+
 // Função para mover o Pac-Man
 void moverPacman() {
-    // Aumenta a frequência de mudanças aleatórias de direção para evitar ficar preso
-    if (rand() % 5 == 0) {
-        direcao_pacman = rand() % 4;
-    }
-    
+    // Verifica se o fantasma está próximo (distância de 5 células)
+    int distanciaFantasma = calcularDistancia(pacman_x, pacman_y, fantasma_x, fantasma_y);
     int nova_x = pacman_x;
     int nova_y = pacman_y;
+    int melhor_direcao = direcao_pacman;
     
-    // Movimento simples: tenta mover na direção atual
-    switch (direcao_pacman) {
-    case 0: nova_x += 1; break; // Direita
-    case 1: nova_y -= 1; break; // Cima
-    case 2: nova_x -= 1; break; // Esquerda
-    case 3: nova_y += 1; break; // Baixo
+    // Se o fantasma estiver próximo, tenta fugir
+    if (distanciaFantasma <= 5) {
+        // Tenta encontrar a direção que aumenta a distância do fantasma
+        int maiorDistancia = -1;
+        
+        // Testa todas as direções possíveis
+        for (int dir = 0; dir < 4; dir++) {
+            int test_x = pacman_x;
+            int test_y = pacman_y;
+            
+            switch (dir) {
+                case 0: test_x += 1; break; // Direita
+                case 1: test_y -= 1; break; // Cima
+                case 2: test_x -= 1; break; // Esquerda
+                case 3: test_y += 1; break; // Baixo
+            }
+            
+            // Verifica se a posição é válida
+            if (!ehParede(test_x, test_y)) {
+                int novaDistancia = calcularDistancia(test_x, test_y, fantasma_x, fantasma_y);
+                if (novaDistancia > maiorDistancia) {
+                    maiorDistancia = novaDistancia;
+                    melhor_direcao = dir;
+                    nova_x = test_x;
+                    nova_y = test_y;
+                }
+            }
+        }
+    } else {
+        // Se não estiver em perigo, procura comida
+        Node* comidaProxima = encontrarComidaProxima(pacman_x, pacman_y);
+        
+        if (comidaProxima) {
+            // Tenta se mover em direção à comida
+            if (comidaProxima->x > pacman_x && !ehParede(pacman_x + 1, pacman_y)) {
+                melhor_direcao = 0; // Direita
+                nova_x = pacman_x + 1;
+            } else if (comidaProxima->x < pacman_x && !ehParede(pacman_x - 1, pacman_y)) {
+                melhor_direcao = 2; // Esquerda
+                nova_x = pacman_x - 1;
+            } else if (comidaProxima->y > pacman_y && !ehParede(pacman_x, pacman_y + 1)) {
+                melhor_direcao = 3; // Baixo
+                nova_y = pacman_y + 1;
+            } else if (comidaProxima->y < pacman_y && !ehParede(pacman_x, pacman_y - 1)) {
+                melhor_direcao = 1; // Cima
+                nova_y = pacman_y - 1;
+            }
+        }
     }
-
-    // Verifica se a posição nova é uma parede
-    if (ehParede(nova_x, nova_y)) {
-        // Se for parede, muda de direção
-        direcao_pacman = (direcao_pacman + 1) % 4;
-        return;
-    }
-
+    
+    // Atualiza a direção e posição
+    direcao_pacman = melhor_direcao;
+    
     // Verifica colisão com paredes e portal
     Node* destino = buscarNo(&mapa, nova_x, nova_y);
     if (destino) {
         if (destino->tipo == 1) { // É parede
+            // Se encontrar parede, tenta outra direção
             direcao_pacman = (direcao_pacman + 1) % 4;
             return;
         }
@@ -202,11 +267,9 @@ void moverPacman() {
         // Se encontrar um portal
         if (destino->tipo == 3) {
             if (nova_x == mapa.portal.x_origem && nova_y == mapa.portal.y_origem) {
-                // Teleporta da origem para o destino
                 pacman_x = mapa.portal.x_destino;
                 pacman_y = mapa.portal.y_destino;
             } else {
-                // Teleporta do destino para a origem
                 pacman_x = mapa.portal.x_origem;
                 pacman_y = mapa.portal.y_origem;
             }
@@ -222,12 +285,8 @@ void moverPacman() {
             }
         }
     } else if (!ehParede(nova_x, nova_y)) {
-        // Se não encontrou nenhum nó mas não é parede, pode mover-se
         pacman_x = nova_x;
         pacman_y = nova_y;
-    } else {
-        // Se colidiu com parede, muda de direção
-        direcao_pacman = (direcao_pacman + 1) % 4;
     }
 }
 
@@ -288,7 +347,7 @@ void iniciarJogo(HWND hwnd) {
     criarMapa();
     
     // Configura um timer para mover o Pac-Man
-    SetTimer(hwnd, 1, 200, NULL);
+    SetTimer(hwnd, 1, 100, NULL);
     
     // Atualiza a janela
     char titulo[100];
@@ -356,8 +415,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SetWindowText(hwnd, titulo);
         } 
         else if (LOWORD(wParam) == ID_BOTAO_INICIAR) {
-            // Inicia o jogo
+            // Inicia o jogo com timer mais rápido (100ms ao invés de 200ms)
             iniciarJogo(hwnd);
+            SetTimer(hwnd, 1, 100, NULL); // Timer mais rápido para o Pac-Man
         }
         break;
 
