@@ -4,6 +4,7 @@
 #include <time.h>
 #include <string.h>
 #include <limits.h>
+#include <curl/curl.h>
 
 #define LARGURA 1000
 #define ALTURA 800
@@ -12,6 +13,31 @@
 #define COLUNAS (LARGURA / TAMANHO_CELULA)
 #define MAX_RANKING 10 // Máximo de jogadores no ranking
 #define MAX_NOME 50 // Tamanho máximo do nome do jogador
+#define GEMINI_API_KEY "AIzaSyDg74YCFEEdQEsvrnR1PQTAdVwAvSe4m6g" // Chave de API do Gemini
+
+// Estrutura para armazenar dados da resposta do Gemini
+struct MemoryStruct {
+    char *memory;
+    size_t size;
+};
+
+// Callback para receber os dados da resposta do Gemini
+static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+    size_t realsize = size * nmemb;
+    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+
+    char *ptr = realloc(mem->memory, mem->size + realsize + 1);
+    if(!ptr) {
+        // Sem memória suficiente
+        return 0;
+    }
+
+    mem->memory = ptr;
+    memcpy(&(mem->memory[mem->size]), contents, realsize);
+    mem->size += realsize;
+    mem->memory[mem->size] = 0;
+    return realsize;
+}
 
 // Estrutura para o ranking
 typedef struct {
@@ -457,13 +483,101 @@ void criarMapa() {
     proximaFruta = 100; // Primeira fruta aparecerá após um tempo
 }
 
-// Função para gerar frutas rosas aleatoriamente
+// Função para gerar posições aleatórias de frutas usando a API Gemini
+int gerarFrutaPosicaoGemini(int *x_fruta, int *y_fruta) {
+    CURL *curl;
+    CURLcode res;
+    struct MemoryStruct chunk;
+    chunk.memory = malloc(1);
+    chunk.size = 0;
+
+    curl = curl_easy_init();
+    if(curl) {
+        char url[256];
+        sprintf(url, "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=%s", GEMINI_API_KEY);
+        
+        // Constrói o prompt para o Gemini
+        char prompt[512];
+        sprintf(prompt, "{\"contents\":[{\"parts\":[{\"text\":\"Gere um par de números aleatórios (x, y) onde x está entre 1 e %d e y está entre 1 e %d. Retorne apenas os números separados por vírgula, sem texto adicional.\"}]}]}", COLUNAS-2, LINHAS-2);
+        
+        // Configura a requisição HTTP
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, prompt);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+        
+        // Configura os headers
+        struct curl_slist *headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        
+        // Faz a requisição
+        res = curl_easy_perform(curl);
+        
+        // Verifica se a requisição foi bem-sucedida
+        if(res != CURLE_OK) {
+            fprintf(stderr, "Falha na requisição à API Gemini: %s\n", curl_easy_strerror(res));
+            curl_easy_cleanup(curl);
+            curl_slist_free_all(headers);
+            free(chunk.memory);
+            return 0;
+        }
+        
+        // Processa a resposta
+        if(chunk.size > 0) {
+            // Tenta extrair os números da resposta JSON
+            char *text_start = strstr(chunk.memory, "\"text\":\"");
+            if(text_start) {
+                text_start += 8; // Avança para depois de "text":"
+                char *text_end = strchr(text_start, '\"');
+                if(text_end) {
+                    *text_end = '\0'; // Termina a string no final do texto
+                    
+                    // Procura por dois números na resposta
+                    if(sscanf(text_start, "%d,%d", x_fruta, y_fruta) == 2) {
+                        // Limpa os recursos e retorna sucesso
+                        curl_easy_cleanup(curl);
+                        curl_slist_free_all(headers);
+                        free(chunk.memory);
+                        return 1;
+                    }
+                }
+            }
+        }
+        
+        // Limpa os recursos
+        curl_easy_cleanup(curl);
+        curl_slist_free_all(headers);
+    }
+    
+    free(chunk.memory);
+    return 0;
+}
+
+// Função modificada para gerar frutas rosas aleatoriamente
 void gerarFrutaRosa() {
     // Encontra uma posição vazia para colocar a fruta
     int x, y;
     BOOL posicaoValida = FALSE;
     int tentativas = 0;
     
+    // Primeiro, tenta usar a API Gemini para gerar posições aleatórias
+    if (gerarFrutaPosicaoGemini(&x, &y)) {
+        // Verifica se a posição gerada pelo Gemini é válida
+        if (x > 0 && x < COLUNAS-1 && y > 0 && y < LINHAS-1 && !ehParede(x, y)) {
+            Node* no = buscarNo(&mapa, x, y);
+            if (no && no->tipo == 0) { // Posição vazia
+                no->tipo = 4; // Converte para fruta rosa
+                posicaoValida = TRUE;
+            } else if (!no) {
+                // Se o nó não existe, cria um novo para a fruta
+                inserirFim(&mapa, x, y, 4);
+                posicaoValida = TRUE;
+            }
+        }
+    }
+    
+    // Se a API Gemini falhar ou retornar posições inválidas, usa o método tradicional
     while (!posicaoValida && tentativas < 100) {
         x = rand() % (COLUNAS - 2) + 1;
         y = rand() % (LINHAS - 2) + 1;
@@ -1122,6 +1236,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Inicializa o gerador de números aleatórios
     srand(time(NULL));
     
+    // Inicializa a biblioteca cURL
+    curl_global_init(CURL_GLOBAL_ALL);
+    
     // Carrega o ranking existente
     carregarRanking();
     
@@ -1135,6 +1252,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (!RegisterClass(&wc)) {
         MessageBox(NULL, "Erro ao registrar a classe da janela!", "Erro", MB_OK | MB_ICONERROR);
+        curl_global_cleanup();  // Limpa recursos da cURL
         return 1;
     }
 
@@ -1149,6 +1267,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (hwnd == NULL) {
         MessageBox(NULL, "Erro ao criar a janela!", "Erro", MB_OK | MB_ICONERROR);
+        curl_global_cleanup();  // Limpa recursos da cURL
         return 1;
     }
 
@@ -1161,5 +1280,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
+    // Limpa recursos da cURL
+    curl_global_cleanup();
+    
     return 0;
 }
