@@ -176,15 +176,14 @@ int ehParede(int x, int y) {
         return 1;
     }
     
-    // Paredes internas do labirinto - mais espaçadas
-    return ((x == 5 && y >= 4 && y <= 12) || 
-            (x == 10 && y >= 6 && y <= 16) ||
-            (x >= 8 && x <= 15 && y == 4) ||
-            (x >= 6 && x <= 13 && y == 10) ||
-            (x >= 18 && x <= 24 && y == 8) ||
-            (x == 18 && y >= 10 && y <= 18) ||
-            (x >= 10 && x <= 20 && y == 15) ||
-            (x == 15 && y >= 18 && y <= 22));
+    // Paredes internas do labirinto - mais espaçadas e reduzidas
+    return ((x == 5 && y >= 5 && y <= 10) || 
+            (x == 10 && y >= 8 && y <= 14) ||
+            (x >= 10 && x <= 13 && y == 4) ||
+            (x >= 7 && x <= 11 && y == 10) ||
+            (x >= 19 && x <= 23 && y == 8) ||
+            (x == 18 && y >= 12 && y <= 16) ||
+            (x >= 12 && x <= 18 && y == 15));
 }
 
 // Função para calcular a distância entre dois pontos
