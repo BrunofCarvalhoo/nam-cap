@@ -41,6 +41,6 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 
 - `gcc -o pacman_inverso pacman_inverso.c -lgdi32 -lcurl`
 
--`.\pacman_inverso.exe`
+- `.\pacman_inverso.exe`
 
 
