@@ -1002,7 +1002,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (pacman_poderoso) {
                     // Pacman venceu ao pegar o fantasma quando poderoso
                     KillTimer(hwnd, 1);
-                    MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
+                    MessageBox(hwnd, "Game Over! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
                     PostQuitMessage(0);
                 } else {
                     // Fantasma capturou o Pacman - mostrar tela de ranking
@@ -1016,7 +1016,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     
                     // Mostra mensagem de vitória
                     char mensagem[200];
-                    sprintf(mensagem, "Vitória! O fantasma capturou o Pac-Man!\nComidas restantes: %d\nDigite seu nome para o ranking.", comidaRestante);
+                    sprintf(mensagem, "Ganhou! O fantasma capturou o Pac-Man!\nComidas restantes: %d\nDigite seu nome para o ranking.", comidaRestante);
                     MessageBox(hwnd, mensagem, "Fim de Jogo", MB_OK);
                     
                     // Cria a tela para entrada do nome
@@ -1033,12 +1033,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (pacman_poderoso) {
                     // Pacman venceu ao pegar o fantasma quando poderoso
                     KillTimer(hwnd, 1);
-                    MessageBox(hwnd, "Vitória! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
+                    MessageBox(hwnd, "Game Over! O Pac-Man capturou o fantasma!", "Fim de Jogo", MB_OK);
                     PostQuitMessage(0);
                 } else {
                     // Fantasma capturou o Pacman
                     KillTimer(hwnd, 1);
-                    MessageBox(hwnd, "Game Over! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
+                    MessageBox(hwnd, "Ganhou! O fantasma capturou o Pac-Man!", "Fim de Jogo", MB_OK);
                     PostQuitMessage(0);
                 }
             }
