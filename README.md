@@ -81,3 +81,4 @@ gcc -o pacman_inverso pacman_inverso.c -lgdi32 -lcurl
 - O arquivo executável será criado na mesma pasta do código fonte
 - O jogo salva automaticamente o ranking dos melhores jogadores em `ranking.txt`
 - A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
+- Talvez seja necessário adicionar a biblioteca libcurl no path nas variáveis de ambiente
