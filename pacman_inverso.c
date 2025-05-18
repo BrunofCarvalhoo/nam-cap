@@ -8,7 +8,7 @@
 
 #define LARGURA 1000
 #define ALTURA 800
-#define TAMANHO_CELULA 35  // Células maiores para labirinto mais espaçado
+#define TAMANHO_CELULA 35 
 #define LINHAS (ALTURA / TAMANHO_CELULA)
 #define COLUNAS (LARGURA / TAMANHO_CELULA)
 #define MAX_RANKING 10 // Máximo de jogadores no ranking

@@ -21,10 +21,11 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 ## 🛠️ Tecnologias Utilizadas
 
 - Linguagem **C**
-- Interface gráfica 
-- Lógica baseada em estrutura de dados
-- Algoritmos de IA simples para movimentação do Pac-Man
-- Projeto contido em um único arquivo: `main.c`
+- API Windows (GDI+)
+- Biblioteca libcurl para integração com API Gemini
+- Estrutura de dados: Lista duplamente encadeada circular
+- Algoritmo de ordenação: QuickSort para o ranking
+- Projeto contido em um único arquivo: `pacman_inverso.c`
 
 ---
 
@@ -37,10 +38,46 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 - William Souza  
 
 ---
-## 🕹️ Compilação/Rodar
+## 🕹️ Como Jogar
 
-- `gcc -o pacman_inverso pacman_inverso.c -lgdi32 -lcurl`
+### Controles
+- Setas direcionais: Movimentar o fantasma
+- Selecione a cor do fantasma no menu inicial antes de começar
 
-- `.\pacman_inverso.exe`
+### Regras
+- Capture o Pac-Man antes que ele coma todas as comidas
+- Evite o Pac-Man quando ele estiver poderoso (após comer uma fruta rosa)
+- Use os portais para se teletransportar pelo mapa
+- Quanto menos comidas o Pac-Man comer, melhor sua pontuação
 
+---
 
+## 💻 Requisitos e Instalação
+
+### Requisitos
+- Sistema Operacional: Windows
+- Compilador GCC
+- Biblioteca libcurl
+
+### Compilação e Execução
+1. Abra o terminal (PowerShell ou Prompt de Comando)
+2. Navegue até a pasta do projeto:
+```bash
+cd C:\caminho\para\pasta\nam-cap
+```
+
+3. Compile o jogo:
+```bash
+gcc -o pacman_inverso pacman_inverso.c -lgdi32 -lcurl
+```
+
+4. Execute o jogo:
+```bash
+.\pacman_inverso.exe
+```
+
+### Observações Importantes
+- Certifique-se de estar na pasta correta do projeto antes de compilar
+- O arquivo executável será criado na mesma pasta do código fonte
+- O jogo salva automaticamente o ranking dos melhores jogadores em `ranking.txt`
+- A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
