@@ -2,34 +2,49 @@
 echo Iniciando Nam-Pac...
 echo.
 
-REM Verifica se algum dos possíveis nomes do DLL existe
+REM Verifica se o GCC está instalado
+where gcc >nul 2>&1
+if errorlevel 1 (
+    echo ERRO: GCC (MinGW) nao encontrado no PATH do sistema!
+    echo Instale o MinGW e adicione ao PATH antes de continuar.
+    pause
+    exit
+)
+
+REM Verifica se o libcurl-4.dll existe ou se precisa ser renomeado
 set "DLL_FOUND=0"
-if exist "libcurl.dll" (
-    set "DLL_NAME=libcurl.dll"
+if exist "libcurl-4.dll" (
+    set "DLL_NAME=libcurl-4.dll"
     set "DLL_FOUND=1"
 ) else if exist "libcurl-x64.dll" (
-    set "DLL_NAME=libcurl-x64.dll"
+    copy /Y "libcurl-x64.dll" "libcurl-4.dll" >nul 2>&1
+    set "DLL_NAME=libcurl-4.dll"
+    set "DLL_FOUND=1"
+) else if exist "libcurl.dll" (
+    copy /Y "libcurl.dll" "libcurl-4.dll" >nul 2>&1
+    set "DLL_NAME=libcurl-4.dll"
     set "DLL_FOUND=1"
 )
 
 if %DLL_FOUND%==0 (
-    echo ERRO: Arquivo libcurl.dll ou libcurl-x64.dll nao encontrado!
-    echo Por favor, certifique-se de que o arquivo DLL esta na mesma pasta.
+    echo ERRO: Nenhum arquivo libcurl-4.dll, libcurl-x64.dll ou libcurl.dll encontrado!
+    echo Por favor, coloque o arquivo DLL correto na pasta do jogo.
     pause
     exit
 )
 
-REM Verifica se o executável existe
+REM Compila o jogo se o executável não existir
 if not exist "pacman_inverso.exe" (
-    echo ERRO: Arquivo pacman_inverso.exe nao encontrado!
-    echo Por favor, certifique-se de que todos os arquivos estao na mesma pasta.
-    pause
-    exit
+    echo Compilando o jogo...
+    gcc -o pacman_inverso.exe pacman_inverso.c -lgdi32 -lcurl
+    if errorlevel 1 (
+        echo ERRO ao compilar o jogo!
+        echo Verifique se o GCC e a libcurl estao corretamente instalados.
+        pause
+        exit
+    )
+    echo Compilacao concluida!
 )
-
-REM Copia o DLL com o nome correto para a pasta atual
-echo Copiando biblioteca necessaria...
-copy /Y "%DLL_NAME%" "libcurl.dll" >nul 2>&1
 
 REM Inicia o jogo
 echo Iniciando o jogo...
@@ -41,4 +56,4 @@ if errorlevel 1 (
     powershell -Command "Start-Process 'pacman_inverso.exe' -Verb RunAs"
 )
 
-exit 
+exit

@@ -52,29 +52,55 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 
 ---
 
+## ⚠️ Requisitos para Compilar e Rodar
+
+Para compilar e rodar o jogo, você precisa ter instalado no seu computador:
+
+- **GCC (MinGW)**  
+  Baixe e instale em: https://sourceforge.net/projects/mingw/  
+  Certifique-se de adicionar o caminho do MinGW (`C:\MinGW\bin`) ao PATH do Windows.
+
+- **libcurl para desenvolvimento**  
+  Você pode instalar facilmente pelo MSYS2 (recomendado):  
+  1. Instale o MSYS2: https://www.msys2.org  
+  2. Abra o terminal `MSYS2 UCRT64`  
+  3. Execute:  
+     ```bash
+     pacman -S mingw-w64-ucrt-x86_64-gcc
+     pacman -S mingw-w64-ucrt-x86_64-curl
+     ```
+  Ou, se usar MinGW puro, baixe a libcurl em https://curl.se/windows/ e copie os arquivos `.dll.a` e `.h` para as pastas do MinGW.
+
+- **DLL da libcurl**  
+  O arquivo `libcurl-4.dll` (ou `libcurl-x64.dll` ou `libcurl.dll`) deve estar na mesma pasta do jogo.
+
+---
+
 ## 💻 Instalação e Execução
 
 ### Método Simples (Recomendado)
 1. Baixe a pasta `nam-cap` completa
 2. Extraia todos os arquivos para uma pasta de sua preferência
 3. Execute o arquivo `jogar.bat` com duplo clique
-4. O jogo iniciará automaticamente
+4. O jogo será compilado e iniciado automaticamente (se os requisitos acima estiverem instalados)
 
 ### Arquivos Necessários
 A pasta do jogo deve conter:
-- `pacman_inverso.exe` (o jogo)
-- `libcurl.dll` (biblioteca necessária)
-- `jogar.bat` (script para iniciar o jogo)
+- `pacman_inverso.c` (código fonte)
+- `libcurl-4.dll` (ou `libcurl-x64.dll` ou `libcurl.dll`)
+- `jogar.bat` (script para compilar e iniciar o jogo)
 - `ranking.txt` (será criado automaticamente)
 
 ### Solução de Problemas
 
-Se o jogo não iniciar:
+Se o jogo não iniciar ou não compilar:
 1. Verifique se todos os arquivos estão na mesma pasta
-2. Tente executar o `jogar.bat` como administrador
-3. Se aparecer erro sobre DLL, execute o `jogar.bat` como administrador
+2. Verifique se o GCC (MinGW) está instalado e no PATH
+3. Verifique se a libcurl de desenvolvimento está instalada
+4. Tente executar o `jogar.bat` como administrador
+5. Se aparecer erro sobre DLL, confira o nome do arquivo DLL solicitado e renomeie se necessário
 
 ### Observações
 - O jogo salva automaticamente o ranking em `ranking.txt`
 - A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
-- Não é necessário instalar nada - apenas execute o `jogar.bat`
+- O script `jogar.bat` compila e executa o jogo automaticamente, mas depende dos requisitos acima
