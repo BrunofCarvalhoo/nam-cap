@@ -54,53 +54,73 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 
 ## ⚠️ Requisitos para Compilar e Rodar
 
-Para compilar e rodar o jogo, você precisa ter instalado no seu computador:
+Para compilar e rodar o jogo, siga os passos abaixo:
 
-- **GCC (MinGW)**  
-  Baixe e instale em: https://sourceforge.net/projects/mingw/  
-  Certifique-se de adicionar o caminho do MinGW (`C:\MinGW\bin`) ao PATH do Windows.
+### 1. Instale o MSYS2
+- Baixe e instale em: https://www.msys2.org
 
-- **libcurl para desenvolvimento**  
-  Você pode instalar facilmente pelo MSYS2 (recomendado):  
-  1. Instale o MSYS2: https://www.msys2.org  
-  2. Abra o terminal `MSYS2 UCRT64`  
-  3. Execute:  
-     ```bash
-     pacman -S mingw-w64-ucrt-x86_64-gcc
-     pacman -S mingw-w64-ucrt-x86_64-curl
-     ```
-  Ou, se usar MinGW puro, baixe a libcurl em https://curl.se/windows/ e copie os arquivos `.dll.a` e `.h` para as pastas do MinGW.
+### 2. Abra o terminal **MSYS2 UCRT64**
+- Procure por "MSYS2 UCRT64" no menu iniciar e abra esse terminal (não use o cmd ou PowerShell do Windows).
 
-- **DLL da libcurl**  
-  O arquivo `libcurl-4.dll` (ou `libcurl-x64.dll` ou `libcurl.dll`) deve estar na mesma pasta do jogo.
+### 3. Instale o GCC e a libcurl
+No terminal MSYS2 UCRT64, execute:
+```bash
+pacman -Syu   # (atualize o sistema, pode pedir para fechar e abrir de novo)
+pacman -S mingw-w64-ucrt-x86_64-gcc
+pacman -S mingw-w64-ucrt-x86_64-curl
+```
+
+### 4. Como garantir que o GCC está no PATH do terminal MSYS2 UCRT64
+
+Se ao digitar `gcc --version` no terminal MSYS2 UCRT64 não aparecer a versão do GCC, siga estes passos:
+
+1. No terminal MSYS2 UCRT64, digite:
+   ```bash
+   echo 'export PATH="/ucrt64/bin:$PATH"' >> ~/.bashrc
+   ```
+2. Feche o terminal MSYS2 UCRT64.
+3. Abra novamente o terminal MSYS2 UCRT64.
+4. Agora digite:
+   ```bash
+   gcc --version
+   ```
+   Se aparecer a versão do GCC, está tudo certo!
+
+**O que isso faz?**
+Esse comando adiciona automaticamente o caminho do compilador e das DLLs do MSYS2 UCRT64 ao PATH toda vez que você abrir o terminal, facilitando a compilação e execução do seu jogo.
+
+### 5. Compile e rode o jogo
+No terminal MSYS2 UCRT64, navegue até a pasta do projeto. Por exemplo:
+```bash
+cd /c/Users/SeuUsuario/Downloads/nam-cap-main
+```
+Compile o jogo:
+```bash
+gcc -o pacman_inverso.exe pacman_inverso.c -lgdi32 -lcurl
+```
+Rode o jogo:
+```bash
+./pacman_inverso.exe
+```
 
 ---
 
-## 💻 Instalação e Execução
-
-### Método Simples (Recomendado)
-1. Baixe a pasta `nam-cap` completa
-2. Extraia todos os arquivos para uma pasta de sua preferência
-3. Execute o arquivo `jogar.bat` com duplo clique
-4. O jogo será compilado e iniciado automaticamente (se os requisitos acima estiverem instalados)
-
-### Arquivos Necessários
+## 📁 Arquivos Necessários
 A pasta do jogo deve conter:
 - `pacman_inverso.c` (código fonte)
-- `libcurl-4.dll` (ou `libcurl-x64.dll` ou `libcurl.dll`)
-- `jogar.bat` (script para compilar e iniciar o jogo)
 - `ranking.txt` (será criado automaticamente)
+- (opcional) assets, README, etc.
 
-### Solução de Problemas
+---
 
-Se o jogo não iniciar ou não compilar:
-1. Verifique se todos os arquivos estão na mesma pasta
-2. Verifique se o GCC (MinGW) está instalado e no PATH
-3. Verifique se a libcurl de desenvolvimento está instalada
-4. Tente executar o `jogar.bat` como administrador
-5. Se aparecer erro sobre DLL, confira o nome do arquivo DLL solicitado e renomeie se necessário
+## 🛠️ Solução de Problemas
+- Sempre use o terminal **MSYS2 UCRT64** para compilar e rodar o jogo.
+- Se der erro de "undefined reference" para funções do curl, confira se instalou o pacote correto (`mingw-w64-ucrt-x86_64-curl`) e se está usando o terminal certo.
+- Se der erro de DLL ao rodar, certifique-se de rodar pelo terminal MSYS2 UCRT64, pois ele já configura o ambiente para encontrar as DLLs.
+- Se quiser rodar o executável fora do MSYS2, copie também as DLLs necessárias de `/ucrt64/bin` para a pasta do jogo.
 
-### Observações
+---
+
+## Observações
 - O jogo salva automaticamente o ranking em `ranking.txt`
 - A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
-- O script `jogar.bat` compila e executa o jogo automaticamente, mas depende dos requisitos acima
