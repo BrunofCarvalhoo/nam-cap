@@ -52,82 +52,43 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 
 ---
 
-## 💻 Requisitos e Instalação
+## 💻 Instalação e Execução
 
-### Requisitos
-- Sistema Operacional: Windows 10 ou superior
-- Compilador GCC (MinGW)
-- Biblioteca libcurl
+### Método 1 - Instalação Automática (Recomendado)
+1. Baixe o arquivo `nam-cap-setup.exe` da pasta de distribuição
+2. Execute o instalador
+3. Siga as instruções na tela
+4. O jogo será instalado automaticamente com todas as dependências necessárias
 
-### Instalação Completa
+### Método 2 - Instalação Manual
+Se preferir instalar manualmente:
 
-1. **Instalar o MinGW (GCC)**
-   - Baixe o MinGW Installer em: https://sourceforge.net/projects/mingw/
-   - Durante a instalação, selecione pelo menos:
-     - mingw32-base
-     - mingw32-gcc-g++
-   - Adicione o caminho `C:\MinGW\bin` às variáveis de ambiente do Windows
+1. **Baixe os arquivos necessários:**
+   - `pacman_inverso.exe` (jogo)
+   - `libcurl.dll` (biblioteca necessária)
+   - `install.bat` (script de instalação)
 
-2. **Instalar a libcurl**
-   - Baixe o pacote completo da libcurl em: https://curl.se/windows/
-   - Escolha a versão "curl-8.x.x-win64-mingw.zip"
-   - Extraia o conteúdo
-   - Copie os arquivos:
-     - `bin/libcurl.dll` para `C:\Windows\System32`
-     - `include/curl` para `C:\MinGW\include`
-     - `lib/libcurl.dll.a` para `C:\MinGW\lib`
+2. **Execute o script de instalação:**
+   - Dê duplo clique em `install.bat`
+   - Aguarde a mensagem "Instalação concluída"
 
-3. **Verificar a Instalação**
-   - Abra um novo terminal e digite:
-   ```bash
-   gcc --version
-   ```
-   - Se aparecer a versão do GCC, a instalação foi bem-sucedida
-
-### Compilação e Execução
-
-1. Abra o terminal (PowerShell ou Prompt de Comando)
-
-2. Navegue até a pasta do projeto:
-```bash
-cd C:\caminho\para\pasta\nam-cap
-```
-
-3. Compile o jogo:
-```bash
-gcc -o pacman_inverso pacman_inverso.c -lgdi32 -lcurl
-```
-
-4. Execute o jogo:
-```bash
-.\pacman_inverso.exe
-```
+3. **Execute o jogo:**
+   - Dê duplo clique em `pacman_inverso.exe`
 
 ### Solução de Problemas
 
-Se aparecer o erro "libcurl.dll não encontrado":
-1. Verifique se o arquivo `libcurl.dll` está em `C:\Windows\System32`
-2. Se não estiver, copie-o da pasta `bin` do pacote da libcurl
-3. Reinicie o terminal após copiar o arquivo
-
-Se aparecer erro de compilação:
-1. Verifique se o GCC está instalado corretamente:
-```bash
-gcc --version
-```
-2. Verifique se as variáveis de ambiente estão configuradas:
-   - Abra "Editar as variáveis de ambiente do sistema"
-   - Em "Variáveis do Sistema", edite "Path"
-   - Adicione `C:\MinGW\bin` se não estiver presente
+Se o jogo não iniciar:
+1. Verifique se todos os arquivos estão na mesma pasta
+2. Execute o `install.bat` novamente
+3. Se ainda não funcionar, tente executar como administrador
 
 ### Arquivos Necessários
-Para distribuir o jogo, você precisa incluir:
-- `pacman_inverso.exe` (arquivo compilado)
-- `libcurl.dll` (da pasta bin da libcurl)
+Para o jogo funcionar, você precisa ter:
+- `pacman_inverso.exe`
+- `libcurl.dll`
 - `ranking.txt` (será criado automaticamente)
 
-### Observações Importantes
-- O jogo salva automaticamente o ranking dos melhores jogadores em `ranking.txt`
+### Observações
+- O jogo salva automaticamente o ranking em `ranking.txt`
 - A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
-- Para distribuir o jogo, crie uma pasta com todos os arquivos necessários
-- Os jogadores precisarão ter o `libcurl.dll` no mesmo diretório do executável ou em `C:\Windows\System32`
+- Não é necessário compilar o jogo - use apenas os arquivos fornecidos
