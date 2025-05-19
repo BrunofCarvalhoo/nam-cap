@@ -58,7 +58,18 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 - Sistema Operacional: Windows
 - Compilador GCC
 - Biblioteca libcurl
+  ### ✅Como instalar o GCC e a libcurl
+  Você deve estar no ambiente **MSYS2 MinGW UCRT64**.  
+  Se ainda não tem o MSYS2, instale aqui: [https://www.msys2.org](https://www.msys2.org)
+  Abra o terminal `MSYS2 UCRT64` e execute:
 
+  ```bash
+  pacman -S mingw-w64-ucrt-x86_64-gcc             # Compilador C
+  pacman -S mingw-w64-ucrt-x86_64-curl            # libcurl (acesso à internet)
+  ```
+  - Talvez seja necessário adicionar a biblioteca libcurl e o GCC no path nas variáveis de ambiente
+
+  
 ### Compilação e Execução
 1. Abra o terminal (PowerShell ou Prompt de Comando)
 2. Navegue até a pasta do projeto:
@@ -81,4 +92,3 @@ gcc -o pacman_inverso pacman_inverso.c -lgdi32 -lcurl
 - O arquivo executável será criado na mesma pasta do código fonte
 - O jogo salva automaticamente o ranking dos melhores jogadores em `ranking.txt`
 - A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
-- Talvez seja necessário adicionar a biblioteca libcurl no path nas variáveis de ambiente
