@@ -54,41 +54,27 @@ O Pac-Man é controlado por uma inteligência artificial (IA) e utiliza o labiri
 
 ## 💻 Instalação e Execução
 
-### Método 1 - Instalação Automática (Recomendado)
-1. Baixe o arquivo `nam-cap-setup.exe` da pasta de distribuição
-2. Execute o instalador
-3. Siga as instruções na tela
-4. O jogo será instalado automaticamente com todas as dependências necessárias
+### Método Simples (Recomendado)
+1. Baixe a pasta `nam-cap` completa
+2. Extraia todos os arquivos para uma pasta de sua preferência
+3. Execute o arquivo `jogar.bat` com duplo clique
+4. O jogo iniciará automaticamente
 
-### Método 2 - Instalação Manual
-Se preferir instalar manualmente:
-
-1. **Baixe os arquivos necessários:**
-   - `pacman_inverso.exe` (jogo)
-   - `libcurl.dll` (biblioteca necessária)
-   - `install.bat` (script de instalação)
-
-2. **Execute o script de instalação:**
-   - Dê duplo clique em `install.bat`
-   - Aguarde a mensagem "Instalação concluída"
-
-3. **Execute o jogo:**
-   - Dê duplo clique em `pacman_inverso.exe`
+### Arquivos Necessários
+A pasta do jogo deve conter:
+- `pacman_inverso.exe` (o jogo)
+- `libcurl.dll` (biblioteca necessária)
+- `jogar.bat` (script para iniciar o jogo)
+- `ranking.txt` (será criado automaticamente)
 
 ### Solução de Problemas
 
 Se o jogo não iniciar:
 1. Verifique se todos os arquivos estão na mesma pasta
-2. Execute o `install.bat` novamente
-3. Se ainda não funcionar, tente executar como administrador
-
-### Arquivos Necessários
-Para o jogo funcionar, você precisa ter:
-- `pacman_inverso.exe`
-- `libcurl.dll`
-- `ranking.txt` (será criado automaticamente)
+2. Tente executar o `jogar.bat` como administrador
+3. Se aparecer erro sobre DLL, execute o `jogar.bat` como administrador
 
 ### Observações
 - O jogo salva automaticamente o ranking em `ranking.txt`
 - A pontuação é baseada na quantidade de comidas que o Pac-Man não conseguiu comer
-- Não é necessário compilar o jogo - use apenas os arquivos fornecidos
+- Não é necessário instalar nada - apenas execute o `jogar.bat`
