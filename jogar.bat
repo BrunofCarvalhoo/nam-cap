@@ -2,10 +2,19 @@
 echo Iniciando Nam-Pac...
 echo.
 
-REM Verifica se o libcurl.dll está na pasta atual
-if not exist "libcurl.dll" (
-    echo ERRO: Arquivo libcurl.dll nao encontrado!
-    echo Por favor, certifique-se de que todos os arquivos estao na mesma pasta.
+REM Verifica se algum dos possíveis nomes do DLL existe
+set "DLL_FOUND=0"
+if exist "libcurl.dll" (
+    set "DLL_NAME=libcurl.dll"
+    set "DLL_FOUND=1"
+) else if exist "libcurl-x64.dll" (
+    set "DLL_NAME=libcurl-x64.dll"
+    set "DLL_FOUND=1"
+)
+
+if %DLL_FOUND%==0 (
+    echo ERRO: Arquivo libcurl.dll ou libcurl-x64.dll nao encontrado!
+    echo Por favor, certifique-se de que o arquivo DLL esta na mesma pasta.
     pause
     exit
 )
@@ -18,8 +27,9 @@ if not exist "pacman_inverso.exe" (
     exit
 )
 
-REM Tenta copiar o DLL para a pasta atual (caso não esteja lá)
-copy /Y "libcurl.dll" ".\libcurl.dll" >nul 2>&1
+REM Copia o DLL com o nome correto para a pasta atual
+echo Copiando biblioteca necessaria...
+copy /Y "%DLL_NAME%" "libcurl.dll" >nul 2>&1
 
 REM Inicia o jogo
 echo Iniciando o jogo...
